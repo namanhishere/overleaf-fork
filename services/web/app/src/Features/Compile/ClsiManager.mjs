@@ -1136,6 +1136,7 @@ function _finaliseRequest(projectId, options, project, docs, files) {
     compile: {
       options: {
         historyId: options.historyId?.toString(), // send as string, if set
+        jobId: options.jobId,
         buildId: options.buildId,
         editorId: options.editorId,
         compiler: project.compiler,

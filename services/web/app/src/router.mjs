@@ -1,1279 +1,1327 @@
-import AdminController from './Features/ServerAdmin/AdminController.mjs'
-import ErrorController from './Features/Errors/ErrorController.mjs'
-import Features from './infrastructure/Features.mjs'
-import ProjectController from './Features/Project/ProjectController.mjs'
-import ProjectApiController from './Features/Project/ProjectApiController.mjs'
-import ProjectListController from './Features/Project/ProjectListController.mjs'
-import SpellingController from './Features/Spelling/SpellingController.mjs'
-import EditorRouter from './Features/Editor/EditorRouter.mjs'
-import Settings from '@overleaf/settings'
-import TpdsController from './Features/ThirdPartyDataStore/TpdsController.mjs'
-import SubscriptionRouter from './Features/Subscription/SubscriptionRouter.mjs'
-import UploadsRouter from './Features/Uploads/UploadsRouter.mjs'
-import metrics from '@overleaf/metrics'
-import ReferalController from './Features/Referal/ReferalController.mjs'
-import AuthenticationController from './Features/Authentication/AuthenticationController.mjs'
-import PermissionsController from './Features/Authorization/PermissionsController.mjs'
-import SessionManager from './Features/Authentication/SessionManager.mjs'
-import TagsController from './Features/Tags/TagsController.mjs'
-import NotificationsController from './Features/Notifications/NotificationsController.mjs'
-import CollaboratorsRouter from './Features/Collaborators/CollaboratorsRouter.mjs'
-import UserInfoController from './Features/User/UserInfoController.mjs'
-import UserController from './Features/User/UserController.mjs'
-import UserEmailsController from './Features/User/UserEmailsController.mjs'
-import UserPagesController from './Features/User/UserPagesController.mjs'
-import TutorialController from './Features/Tutorial/TutorialController.mjs'
-import DocumentController from './Features/Documents/DocumentController.mjs'
-import CompileManager from './Features/Compile/CompileManager.mjs'
-import CompileController from './Features/Compile/CompileController.mjs'
-import HealthCheckController from './Features/HealthCheck/HealthCheckController.mjs'
-import ProjectDownloadsController from './Features/Downloads/ProjectDownloadsController.mjs'
-import FileStoreController from './Features/FileStore/FileStoreController.mjs'
-import DocumentUpdaterController from './Features/DocumentUpdater/DocumentUpdaterController.mjs'
-import HistoryRouter from './Features/History/HistoryRouter.mjs'
-import ExportsController from './Features/Exports/ExportsController.mjs'
-import PasswordResetRouter from './Features/PasswordReset/PasswordResetRouter.mjs'
-import StaticPagesRouter from './Features/StaticPages/StaticPagesRouter.mjs'
-import ChatController from './Features/Chat/ChatController.mjs'
-import Modules from './infrastructure/Modules.mjs'
+import AdminController from "./Features/ServerAdmin/AdminController.mjs";
+import AuditLogController from "./Features/Audit/AuditLogController.mjs";
+import AdminUsersRouter from "./Features/ServerAdmin/AdminUsersRouter.mjs";
+import ErrorController from "./Features/Errors/ErrorController.mjs";
+import Features from "./infrastructure/Features.mjs";
+import ProjectController from "./Features/Project/ProjectController.mjs";
+import ProjectApiController from "./Features/Project/ProjectApiController.mjs";
+import ProjectListController from "./Features/Project/ProjectListController.mjs";
+import SpellingController from "./Features/Spelling/SpellingController.mjs";
+import EditorRouter from "./Features/Editor/EditorRouter.mjs";
+import Settings from "@overleaf/settings";
+import TpdsController from "./Features/ThirdPartyDataStore/TpdsController.mjs";
+import SubscriptionRouter from "./Features/Subscription/SubscriptionRouter.mjs";
+import UploadsRouter from "./Features/Uploads/UploadsRouter.mjs";
+import metrics from "@overleaf/metrics";
+import ReferalController from "./Features/Referal/ReferalController.mjs";
+import AuthenticationController from "./Features/Authentication/AuthenticationController.mjs";
+import PermissionsController from "./Features/Authorization/PermissionsController.mjs";
+import SessionManager from "./Features/Authentication/SessionManager.mjs";
+import TagsController from "./Features/Tags/TagsController.mjs";
+import NotificationsController from "./Features/Notifications/NotificationsController.mjs";
+import CollaboratorsRouter from "./Features/Collaborators/CollaboratorsRouter.mjs";
+import UserInfoController from "./Features/User/UserInfoController.mjs";
+import UserController from "./Features/User/UserController.mjs";
+import UserEmailsController from "./Features/User/UserEmailsController.mjs";
+import UserPagesController from "./Features/User/UserPagesController.mjs";
+import TutorialController from "./Features/Tutorial/TutorialController.mjs";
+import DocumentController from "./Features/Documents/DocumentController.mjs";
+import CompileManager from "./Features/Compile/CompileManager.mjs";
+import CompileController from "./Features/Compile/CompileController.mjs";
+import HealthCheckController from "./Features/HealthCheck/HealthCheckController.mjs";
+import ProjectDownloadsController from "./Features/Downloads/ProjectDownloadsController.mjs";
+import FileStoreController from "./Features/FileStore/FileStoreController.mjs";
+import DocumentUpdaterController from "./Features/DocumentUpdater/DocumentUpdaterController.mjs";
+import HistoryRouter from "./Features/History/HistoryRouter.mjs";
+import ExportsController from "./Features/Exports/ExportsController.mjs";
+import PasswordResetRouter from "./Features/PasswordReset/PasswordResetRouter.mjs";
+import StaticPagesRouter from "./Features/StaticPages/StaticPagesRouter.mjs";
+import ChatController from "./Features/Chat/ChatController.mjs";
+import Modules from "./infrastructure/Modules.mjs";
 import {
   RateLimiter,
   openProjectRateLimiter,
   overleafLoginRateLimiter,
-} from './infrastructure/RateLimiter.mjs'
-import RateLimiterMiddleware from './Features/Security/RateLimiterMiddleware.mjs'
-import InactiveProjectController from './Features/InactiveData/InactiveProjectController.mjs'
-import ContactRouter from './Features/Contacts/ContactRouter.mjs'
-import ReferencesController from './Features/References/ReferencesController.mjs'
-import AuthorizationMiddleware from './Features/Authorization/AuthorizationMiddleware.mjs'
-import BetaProgramController from './Features/BetaProgram/BetaProgramController.mjs'
-import AnalyticsRouter from './Features/Analytics/AnalyticsRouter.mjs'
-import MetaController from './Features/Metadata/MetaController.mjs'
-import TokenAccessController from './Features/TokenAccess/TokenAccessController.mjs'
-import TokenAccessRouter from './Features/TokenAccess/TokenAccessRouter.mjs'
-import LinkedFilesRouter from './Features/LinkedFiles/LinkedFilesRouter.mjs'
-import TemplatesRouter from './Features/Templates/TemplatesRouter.mjs'
-import UserMembershipRouter from './Features/UserMembership/UserMembershipRouter.mjs'
-import SystemMessageController from './Features/SystemMessages/SystemMessageController.mjs'
-import AnalyticsRegistrationSourceMiddleware from './Features/Analytics/AnalyticsRegistrationSourceMiddleware.mjs'
-import AnalyticsUTMTrackingMiddleware from './Features/Analytics/AnalyticsUTMTrackingMiddleware.mjs'
-import CaptchaMiddleware from './Features/Captcha/CaptchaMiddleware.mjs'
-import UnsupportedBrowserMiddleware from './infrastructure/UnsupportedBrowserMiddleware.mjs'
-import logger from '@overleaf/logger'
-import _ from 'lodash'
-import { plainTextResponse } from './infrastructure/Response.mjs'
-import SocketDiagnostics from './Features/SocketDiagnostics/SocketDiagnostics.mjs'
-import ClsiCacheController from './Features/Compile/ClsiCacheController.mjs'
-import AsyncLocalStorage from './infrastructure/AsyncLocalStorage.mjs'
+} from "./infrastructure/RateLimiter.mjs";
+import RateLimiterMiddleware from "./Features/Security/RateLimiterMiddleware.mjs";
+import InactiveProjectController from "./Features/InactiveData/InactiveProjectController.mjs";
+import ContactRouter from "./Features/Contacts/ContactRouter.mjs";
+import ReferencesController from "./Features/References/ReferencesController.mjs";
+import AuthorizationMiddleware from "./Features/Authorization/AuthorizationMiddleware.mjs";
+import BetaProgramController from "./Features/BetaProgram/BetaProgramController.mjs";
+import AnalyticsRouter from "./Features/Analytics/AnalyticsRouter.mjs";
+import MetaController from "./Features/Metadata/MetaController.mjs";
+import TokenAccessController from "./Features/TokenAccess/TokenAccessController.mjs";
+import TokenAccessRouter from "./Features/TokenAccess/TokenAccessRouter.mjs";
+import LinkedFilesRouter from "./Features/LinkedFiles/LinkedFilesRouter.mjs";
+import TemplatesRouter from "./Features/Templates/TemplatesRouter.mjs";
+import UserMembershipRouter from "./Features/UserMembership/UserMembershipRouter.mjs";
+import SystemMessageController from "./Features/SystemMessages/SystemMessageController.mjs";
+import AnalyticsRegistrationSourceMiddleware from "./Features/Analytics/AnalyticsRegistrationSourceMiddleware.mjs";
+import AnalyticsUTMTrackingMiddleware from "./Features/Analytics/AnalyticsUTMTrackingMiddleware.mjs";
+import CaptchaMiddleware from "./Features/Captcha/CaptchaMiddleware.mjs";
+import UnsupportedBrowserMiddleware from "./infrastructure/UnsupportedBrowserMiddleware.mjs";
+import logger from "@overleaf/logger";
+import _ from "lodash";
+import { plainTextResponse } from "./infrastructure/Response.mjs";
+import SocketDiagnostics from "./Features/SocketDiagnostics/SocketDiagnostics.mjs";
+import ClsiCacheController from "./Features/Compile/ClsiCacheController.mjs";
+import AsyncLocalStorage from "./infrastructure/AsyncLocalStorage.mjs";
 
 const { renderUnsupportedBrowserPage, unsupportedBrowserMiddleware } =
-  UnsupportedBrowserMiddleware
+  UnsupportedBrowserMiddleware;
 
 const rateLimiters = {
-  addEmail: new RateLimiter('add-email', {
+  adminAuditRead: new RateLimiter("admin-audit-read", {
+    points: 120,
+    duration: 60,
+  }),
+  addEmail: new RateLimiter("add-email", {
     points: 10,
     duration: 60,
   }),
-  addProjectToTag: new RateLimiter('add-project-to-tag', {
+  addProjectToTag: new RateLimiter("add-project-to-tag", {
     points: 30,
     duration: 60,
   }),
-  addProjectsToTag: new RateLimiter('add-projects-to-tag', {
+  addProjectsToTag: new RateLimiter("add-projects-to-tag", {
     points: 30,
     duration: 60,
   }),
-  canSkipCaptcha: new RateLimiter('can-skip-captcha', {
+  canSkipCaptcha: new RateLimiter("can-skip-captcha", {
     points: 20,
     duration: 60,
   }),
-  changePassword: new RateLimiter('change-password', {
+  changePassword: new RateLimiter("change-password", {
     points: 10,
     duration: 60,
   }),
-  compileProjectHttp: new RateLimiter('compile-project-http', {
+  compileProjectHttp: new RateLimiter("compile-project-http", {
     points: 200,
     duration: 10 * 60,
   }),
-  confirmEmail: new RateLimiter('confirm-email', {
+  confirmEmail: new RateLimiter("confirm-email", {
     points: 10,
     duration: 60,
   }),
-  createProject: new RateLimiter('create-project', {
+  createProject: new RateLimiter("create-project", {
     points: 20,
     duration: 60,
   }),
-  createTag: new RateLimiter('create-tag', {
+  createTag: new RateLimiter("create-tag", {
     points: 30,
     duration: 60,
   }),
-  deleteEmail: new RateLimiter('delete-email', {
+  deleteEmail: new RateLimiter("delete-email", {
     points: 10,
     duration: 60,
   }),
-  deleteTag: new RateLimiter('delete-tag', {
+  deleteTag: new RateLimiter("delete-tag", {
     points: 30,
     duration: 60,
   }),
-  deleteUser: new RateLimiter('delete-user', {
+  deleteUser: new RateLimiter("delete-user", {
     points: 10,
     duration: 60,
   }),
-  endorseEmail: new RateLimiter('endorse-email', {
+  endorseEmail: new RateLimiter("endorse-email", {
     points: 30,
     duration: 60,
   }),
-  getProjects: new RateLimiter('get-projects', {
+  getProjects: new RateLimiter("get-projects", {
     points: 30,
     duration: 60,
   }),
-  grantTokenAccessReadOnly: new RateLimiter('grant-token-access-read-only', {
+  grantTokenAccessReadOnly: new RateLimiter("grant-token-access-read-only", {
     points: 10,
     duration: 60,
   }),
-  grantTokenAccessReadWrite: new RateLimiter('grant-token-access-read-write', {
+  grantTokenAccessReadWrite: new RateLimiter("grant-token-access-read-write", {
     points: 10,
     duration: 60,
   }),
-  indexAllProjectReferences: new RateLimiter('index-all-project-references', {
+  indexAllProjectReferences: new RateLimiter("index-all-project-references", {
     points: 30,
     duration: 60,
   }),
-  miscOutputDownload: new RateLimiter('misc-output-download', {
+  miscOutputDownload: new RateLimiter("misc-output-download", {
     points: 1000,
     duration: 60 * 60,
   }),
   multipleProjectsZipDownload: new RateLimiter(
-    'multiple-projects-zip-download',
+    "multiple-projects-zip-download",
     {
       points: 10,
       duration: 60,
-    }
+    },
   ),
-  openDashboard: new RateLimiter('open-dashboard', {
+  openDashboard: new RateLimiter("open-dashboard", {
     points: 30,
     duration: 60,
   }),
-  readAndWriteToken: new RateLimiter('read-and-write-token', {
+  readAndWriteToken: new RateLimiter("read-and-write-token", {
     points: 15,
     duration: 60,
   }),
-  readOnlyToken: new RateLimiter('read-only-token', {
+  readOnlyToken: new RateLimiter("read-only-token", {
     points: 15,
     duration: 60,
   }),
-  removeProjectFromTag: new RateLimiter('remove-project-from-tag', {
+  removeProjectFromTag: new RateLimiter("remove-project-from-tag", {
     points: 30,
     duration: 60,
   }),
-  removeProjectsFromTag: new RateLimiter('remove-projects-from-tag', {
+  removeProjectsFromTag: new RateLimiter("remove-projects-from-tag", {
     points: 30,
     duration: 60,
   }),
-  renameTag: new RateLimiter('rename-tag', {
+  renameTag: new RateLimiter("rename-tag", {
     points: 30,
     duration: 60,
   }),
-  resendConfirmation: new RateLimiter('resend-confirmation', {
+  resendConfirmation: new RateLimiter("resend-confirmation", {
     points: 1,
     duration: 60,
   }),
-  sendConfirmation: new RateLimiter('send-confirmation', {
+  sendConfirmation: new RateLimiter("send-confirmation", {
     points: 2,
     duration: 60,
   }),
-  sendChatMessage: new RateLimiter('send-chat-message', {
+  sendChatMessage: new RateLimiter("send-chat-message", {
     points: 100,
     duration: 60,
   }),
-  statusCompiler: new RateLimiter('status-compiler', {
+  statusCompiler: new RateLimiter("status-compiler", {
     points: 10,
     duration: 60,
   }),
-  zipDownload: new RateLimiter('zip-download', {
+  zipDownload: new RateLimiter("zip-download", {
     points: 10,
     duration: 60,
   }),
-  documentExport: new RateLimiter('document-export', {
+  documentExport: new RateLimiter("document-export", {
     points: 5,
     duration: 60,
   }),
-  documentExportDownload: new RateLimiter('document-export-download', {
+  documentExportDownload: new RateLimiter("document-export-download", {
     points: 30,
     duration: 60,
   }),
-}
+};
 
 async function initialize(webRouter, privateApiRouter, publicApiRouter) {
-  webRouter.use(unsupportedBrowserMiddleware)
+  webRouter.use(unsupportedBrowserMiddleware);
 
   if (!Settings.allowPublicAccess) {
-    webRouter.all('*', AuthenticationController.requireGlobalLogin)
+    webRouter.all("*", AuthenticationController.requireGlobalLogin);
   }
 
-  webRouter.get('*', AnalyticsRegistrationSourceMiddleware.setInbound())
-  webRouter.get('*', AnalyticsUTMTrackingMiddleware.recordUTMTags())
+  webRouter.get("*", AnalyticsRegistrationSourceMiddleware.setInbound());
+  webRouter.get("*", AnalyticsUTMTrackingMiddleware.recordUTMTags());
 
-  if (process.env.NODE_ENV === 'development' && global.__coverage__) {
+  if (process.env.NODE_ENV === "development" && global.__coverage__) {
     // Expose code coverage via an endpoint when running with code coverage enabled
-    webRouter.get('/coverage', (req, res) => {
-      const coverage = {}
+    webRouter.get("/coverage", (req, res) => {
+      const coverage = {};
       for (const [key, value] of Object.entries(global.__coverage__)) {
         coverage[key] = {
           ...value,
           // Transform for Jenkins sourcemap
-          path: value.path.replace('/overleaf/', '/workspace/'),
-        }
+          path: value.path.replace("/overleaf/", "/workspace/"),
+        };
       }
-      res.json({ coverage })
-    })
+      res.json({ coverage });
+    });
   }
 
   // Mount onto /login in order to get the deviceHistory cookie.
   webRouter.post(
-    '/login/can-skip-captcha',
+    "/login/can-skip-captcha",
     // Keep in sync with the overleaf-login options.
     RateLimiterMiddleware.rateLimit(rateLimiters.canSkipCaptcha),
-    CaptchaMiddleware.canSkipCaptcha
-  )
+    CaptchaMiddleware.canSkipCaptcha,
+  );
 
-  webRouter.get('/login', UserPagesController.loginPage)
-  AuthenticationController.addEndpointToLoginWhitelist('/login')
+  webRouter.get("/login", UserPagesController.loginPage);
+  AuthenticationController.addEndpointToLoginWhitelist("/login");
 
   webRouter.post(
-    '/login',
+    "/login",
     RateLimiterMiddleware.rateLimit(overleafLoginRateLimiter), // rate limit IP (20 / 60s)
     RateLimiterMiddleware.loginRateLimitEmail(), // rate limit email (10 / 120s)
-    CaptchaMiddleware.validateCaptcha('login'),
-    AuthenticationController.passportLogin
-  )
+    CaptchaMiddleware.validateCaptcha("login"),
+    AuthenticationController.passportLogin,
+  );
 
   webRouter.get(
-    '/compromised-password',
+    "/compromised-password",
     AuthenticationController.requireLogin(),
-    UserPagesController.compromisedPasswordPage
-  )
+    UserPagesController.compromisedPasswordPage,
+  );
 
-  webRouter.get('/account-suspended', UserPagesController.accountSuspended)
+  webRouter.get("/account-suspended", UserPagesController.accountSuspended);
 
   webRouter.get(
-    '/socket-diagnostics',
+    "/socket-diagnostics",
     AuthenticationController.requireLogin(),
-    SocketDiagnostics.index
-  )
+    SocketDiagnostics.index,
+  );
 
   if (Settings.enableLegacyLogin) {
-    AuthenticationController.addEndpointToLoginWhitelist('/login/legacy')
-    webRouter.get('/login/legacy', UserPagesController.loginPage)
+    AuthenticationController.addEndpointToLoginWhitelist("/login/legacy");
+    webRouter.get("/login/legacy", UserPagesController.loginPage);
     webRouter.post(
-      '/login/legacy',
+      "/login/legacy",
       RateLimiterMiddleware.rateLimit(overleafLoginRateLimiter), // rate limit IP (20 / 60s)
       RateLimiterMiddleware.loginRateLimitEmail(), // rate limit email (10 / 120s)
-      CaptchaMiddleware.validateCaptcha('login'),
-      AuthenticationController.passportLogin
-    )
+      CaptchaMiddleware.validateCaptcha("login"),
+      AuthenticationController.passportLogin,
+    );
   }
 
   webRouter.get(
-    '/read-only/one-time-login',
-    UserPagesController.oneTimeLoginPage
-  )
+    "/read-only/one-time-login",
+    UserPagesController.oneTimeLoginPage,
+  );
   AuthenticationController.addEndpointToLoginWhitelist(
-    '/read-only/one-time-login'
-  )
+    "/read-only/one-time-login",
+  );
 
-  webRouter.get('/logout', UserPagesController.logout)
-  webRouter.post('/logout', UserController.logout)
+  webRouter.get("/logout", UserPagesController.logout);
+  webRouter.post("/logout", UserController.logout);
 
-  webRouter.get('/restricted', AuthorizationMiddleware.restricted)
+  webRouter.get("/restricted", AuthorizationMiddleware.restricted);
 
-  if (Features.hasFeature('registration-page')) {
-    webRouter.get('/register', UserPagesController.registerPage)
-    AuthenticationController.addEndpointToLoginWhitelist('/register')
+  if (Features.hasFeature("registration-page")) {
+    webRouter.get("/register", UserPagesController.registerPage);
+    AuthenticationController.addEndpointToLoginWhitelist("/register");
   }
 
-  EditorRouter.apply(webRouter, privateApiRouter)
-  CollaboratorsRouter.apply(webRouter, privateApiRouter)
-  SubscriptionRouter.apply(webRouter, privateApiRouter, publicApiRouter)
-  UploadsRouter.apply(webRouter, privateApiRouter)
-  PasswordResetRouter.apply(webRouter, privateApiRouter)
-  StaticPagesRouter.apply(webRouter, privateApiRouter)
-  ContactRouter.apply(webRouter, privateApiRouter)
-  AnalyticsRouter.apply(webRouter, privateApiRouter, publicApiRouter)
-  LinkedFilesRouter.apply(webRouter, privateApiRouter, publicApiRouter)
-  TemplatesRouter.apply(webRouter)
-  UserMembershipRouter.apply(webRouter)
-  TokenAccessRouter.apply(webRouter)
-  HistoryRouter.apply(webRouter, privateApiRouter)
+  EditorRouter.apply(webRouter, privateApiRouter);
+  CollaboratorsRouter.apply(webRouter, privateApiRouter);
+  SubscriptionRouter.apply(webRouter, privateApiRouter, publicApiRouter);
+  UploadsRouter.apply(webRouter, privateApiRouter);
+  PasswordResetRouter.apply(webRouter, privateApiRouter);
+  StaticPagesRouter.apply(webRouter, privateApiRouter);
+  ContactRouter.apply(webRouter, privateApiRouter);
+  AnalyticsRouter.apply(webRouter, privateApiRouter, publicApiRouter);
+  LinkedFilesRouter.apply(webRouter, privateApiRouter, publicApiRouter);
+  TemplatesRouter.apply(webRouter);
+  UserMembershipRouter.apply(webRouter);
+  TokenAccessRouter.apply(webRouter);
+  HistoryRouter.apply(webRouter, privateApiRouter);
 
-  await Modules.applyRouter(webRouter, privateApiRouter, publicApiRouter)
+  await Modules.applyRouter(webRouter, privateApiRouter, publicApiRouter);
+  AdminUsersRouter.apply(webRouter, privateApiRouter);
 
   if (Settings.enableSubscriptions) {
     webRouter.get(
-      '/user/bonus',
+      "/user/bonus",
       AuthenticationController.requireLogin(),
-      ReferalController.bonus
-    )
+      ReferalController.bonus,
+    );
   }
 
   // .getMessages will generate an empty response for anonymous users.
-  webRouter.get('/system/messages', SystemMessageController.getMessages)
+  webRouter.get("/system/messages", SystemMessageController.getMessages);
 
   webRouter.get(
-    '/user/settings',
+    "/user/settings",
     AuthenticationController.requireLogin(),
     PermissionsController.useCapabilities(),
-    UserPagesController.settingsPage
-  )
+    UserPagesController.settingsPage,
+  );
   webRouter.post(
-    '/user/settings',
+    "/user/settings",
     AuthenticationController.requireLogin(),
-    UserController.updateUserSettings
-  )
+    UserController.updateUserSettings,
+  );
   webRouter.post(
-    '/user/password/update',
+    "/user/password/update",
     AuthenticationController.requireLogin(),
     RateLimiterMiddleware.rateLimit(rateLimiters.changePassword),
-    PermissionsController.requirePermission('change-password'),
-    UserController.changePassword
-  )
+    PermissionsController.requirePermission("change-password"),
+    UserController.changePassword,
+  );
   webRouter.get(
-    '/user/emails',
+    "/user/emails",
     AuthenticationController.requireLogin(),
     AsyncLocalStorage.middleware,
     PermissionsController.useCapabilities(),
     UserController.ensureAffiliationMiddleware,
-    UserEmailsController.list
-  )
+    UserEmailsController.list,
+  );
   webRouter.get(
-    '/user/emails/confirm',
+    "/user/emails/confirm",
     AuthenticationController.requireLogin(),
-    UserEmailsController.showConfirm
-  )
+    UserEmailsController.showConfirm,
+  );
   webRouter.post(
-    '/user/emails/confirm',
+    "/user/emails/confirm",
     AuthenticationController.requireLogin(),
     RateLimiterMiddleware.rateLimit(rateLimiters.confirmEmail),
-    UserEmailsController.confirm
-  )
+    UserEmailsController.confirm,
+  );
 
   webRouter.post(
-    '/user/emails/send-confirmation-code',
+    "/user/emails/send-confirmation-code",
     AuthenticationController.requireLogin(),
     RateLimiterMiddleware.rateLimit(rateLimiters.sendConfirmation),
-    await Modules.middleware('confirmationEmailMiddleware'),
-    UserEmailsController.sendExistingEmailConfirmationCode
-  )
+    await Modules.middleware("confirmationEmailMiddleware"),
+    UserEmailsController.sendExistingEmailConfirmationCode,
+  );
 
   webRouter.post(
-    '/user/emails/resend-confirmation-code',
+    "/user/emails/resend-confirmation-code",
     AuthenticationController.requireLogin(),
     RateLimiterMiddleware.rateLimit(rateLimiters.resendConfirmation),
-    UserEmailsController.resendExistingSecondaryEmailConfirmationCode
-  )
+    UserEmailsController.resendExistingSecondaryEmailConfirmationCode,
+  );
 
   webRouter.post(
-    '/user/emails/confirm-code',
+    "/user/emails/confirm-code",
     AuthenticationController.requireLogin(),
     RateLimiterMiddleware.rateLimit(rateLimiters.confirmEmail),
-    UserEmailsController.checkExistingEmailConfirmationCode
-  )
+    UserEmailsController.checkExistingEmailConfirmationCode,
+  );
 
   webRouter.get(
-    '/user/emails/primary-email-check',
+    "/user/emails/primary-email-check",
     AuthenticationController.requireLogin(),
-    UserEmailsController.primaryEmailCheckPage
-  )
+    UserEmailsController.primaryEmailCheckPage,
+  );
 
   webRouter.post(
-    '/user/emails/primary-email-check',
+    "/user/emails/primary-email-check",
     AuthenticationController.requireLogin(),
     PermissionsController.useCapabilities(),
-    UserEmailsController.primaryEmailCheck
-  )
+    UserEmailsController.primaryEmailCheck,
+  );
 
-  if (Features.hasFeature('affiliations')) {
+  if (Features.hasFeature("affiliations")) {
     webRouter.post(
-      '/user/emails/delete',
+      "/user/emails/delete",
       AuthenticationController.requireLogin(),
       RateLimiterMiddleware.rateLimit(rateLimiters.deleteEmail),
-      await Modules.middleware('userDeleteEmail'),
-      UserEmailsController.remove
-    )
+      await Modules.middleware("userDeleteEmail"),
+      UserEmailsController.remove,
+    );
     webRouter.post(
-      '/user/emails/default',
+      "/user/emails/default",
       AuthenticationController.requireLogin(),
-      UserEmailsController.setDefault
-    )
+      UserEmailsController.setDefault,
+    );
     webRouter.post(
-      '/user/emails/endorse',
+      "/user/emails/endorse",
       AuthenticationController.requireLogin(),
-      PermissionsController.requirePermission('endorse-email'),
+      PermissionsController.requirePermission("endorse-email"),
       RateLimiterMiddleware.rateLimit(rateLimiters.endorseEmail),
-      UserEmailsController.endorse
-    )
+      UserEmailsController.endorse,
+    );
   }
 
-  if (Features.hasFeature('saas')) {
+  if (Features.hasFeature("saas")) {
     webRouter.get(
-      '/user/emails/add-secondary',
+      "/user/emails/add-secondary",
       AuthenticationController.requireLogin(),
-      PermissionsController.requirePermission('add-secondary-email'),
-      UserEmailsController.addSecondaryEmailPage
-    )
+      PermissionsController.requirePermission("add-secondary-email"),
+      UserEmailsController.addSecondaryEmailPage,
+    );
 
     webRouter.get(
-      '/user/emails/confirm-secondary',
+      "/user/emails/confirm-secondary",
       AuthenticationController.requireLogin(),
-      PermissionsController.requirePermission('add-secondary-email'),
-      UserEmailsController.confirmSecondaryEmailPage
-    )
+      PermissionsController.requirePermission("add-secondary-email"),
+      UserEmailsController.confirmSecondaryEmailPage,
+    );
   }
 
   webRouter.get(
-    '/user/sessions',
+    "/user/sessions",
     AuthenticationController.requireLogin(),
-    UserPagesController.sessionsPage
-  )
+    UserPagesController.sessionsPage,
+  );
   webRouter.post(
-    '/user/sessions/clear',
+    "/user/sessions/clear",
     AuthenticationController.requireLogin(),
-    UserController.clearSessions
-  )
+    UserController.clearSessions,
+  );
 
   // deprecated
   webRouter.delete(
-    '/user/newsletter/unsubscribe',
+    "/user/newsletter/unsubscribe",
     AuthenticationController.requireLogin(),
-    UserController.unsubscribe
-  )
+    UserController.unsubscribe,
+  );
 
   webRouter.post(
-    '/user/newsletter/unsubscribe',
+    "/user/newsletter/unsubscribe",
     AuthenticationController.requireLogin(),
-    UserController.unsubscribe
-  )
+    UserController.unsubscribe,
+  );
 
   webRouter.post(
-    '/user/newsletter/subscribe',
+    "/user/newsletter/subscribe",
     AuthenticationController.requireLogin(),
-    UserController.subscribe
-  )
+    UserController.subscribe,
+  );
 
   webRouter.get(
-    '/user/email-preferences',
+    "/user/email-preferences",
     AuthenticationController.requireLogin(),
-    UserPagesController.emailPreferencesPage
-  )
+    UserPagesController.emailPreferencesPage,
+  );
 
   webRouter.post(
-    '/user/delete',
+    "/user/delete",
     RateLimiterMiddleware.rateLimit(rateLimiters.deleteUser),
     AuthenticationController.requireLogin(),
-    PermissionsController.requirePermission('delete-own-account'),
-    UserController.tryDeleteUser
-  )
+    PermissionsController.requirePermission("delete-own-account"),
+    UserController.tryDeleteUser,
+  );
 
   webRouter.get(
-    '/user/personal_info',
+    "/user/personal_info",
     AuthenticationController.requireLogin(),
-    UserInfoController.getLoggedInUsersPersonalInfo
-  )
+    UserInfoController.getLoggedInUsersPersonalInfo,
+  );
   privateApiRouter.get(
-    '/user/:user_id/personal_info',
+    "/user/:user_id/personal_info",
     AuthenticationController.requirePrivateApiAuth(),
-    UserInfoController.getPersonalInfo
-  )
+    UserInfoController.getPersonalInfo,
+  );
   webRouter.get(
-    '/user/features',
+    "/user/features",
     AuthenticationController.requireLogin(),
-    UserInfoController.getUserFeatures
-  )
+    UserInfoController.getUserFeatures,
+  );
 
   webRouter.get(
-    '/user/reconfirm',
-    UserPagesController.renderReconfirmAccountPage
-  )
+    "/user/reconfirm",
+    UserPagesController.renderReconfirmAccountPage,
+  );
   // for /user/reconfirm POST, see password router
 
   webRouter.get(
-    '/user/tpds/queues',
+    "/user/tpds/queues",
     AuthenticationController.requireLogin(),
-    TpdsController.getQueues
-  )
+    TpdsController.getQueues,
+  );
 
   webRouter.post(
-    '/tutorial/:tutorialKey/complete',
+    "/tutorial/:tutorialKey/complete",
     AuthenticationController.requireLogin(),
-    TutorialController.completeTutorial
-  )
+    TutorialController.completeTutorial,
+  );
 
   webRouter.post(
-    '/tutorial/:tutorialKey/postpone',
+    "/tutorial/:tutorialKey/postpone",
     AuthenticationController.requireLogin(),
-    TutorialController.postponeTutorial
-  )
+    TutorialController.postponeTutorial,
+  );
 
   webRouter.get(
-    '/user/projects',
+    "/user/projects",
     AuthenticationController.requireLogin(),
-    ProjectController.userProjectsJson
-  )
+    ProjectController.userProjectsJson,
+  );
   webRouter.get(
-    '/project/:Project_id/entities',
+    "/project/:Project_id/entities",
     AuthenticationController.requireLogin(),
     AuthorizationMiddleware.ensureUserCanReadProject,
-    ProjectController.projectEntitiesJson
-  )
+    ProjectController.projectEntitiesJson,
+  );
 
   webRouter.get(
-    '/project',
+    "/project",
     AuthenticationController.requireLogin(),
     RateLimiterMiddleware.rateLimit(rateLimiters.openDashboard),
     AsyncLocalStorage.middleware,
-    await Modules.middleware('domainCaptureTestSession'),
+    await Modules.middleware("domainCaptureTestSession"),
     PermissionsController.useCapabilities(),
-    ProjectListController.projectListPage
-  )
+    ProjectListController.projectListPage,
+  );
   webRouter.post(
-    '/project/new',
+    "/project/new",
     AuthenticationController.requireLogin(),
     RateLimiterMiddleware.rateLimit(rateLimiters.createProject),
-    ProjectController.newProject
-  )
+    ProjectController.newProject,
+  );
   webRouter.post(
-    '/api/project',
+    "/api/project",
     AuthenticationController.requireLogin(),
     RateLimiterMiddleware.rateLimit(rateLimiters.getProjects),
-    ProjectListController.getProjectsJson
-  )
+    ProjectListController.getProjectsJson,
+  );
 
   for (const route of [
     // Keep the old route for continuous metrics
-    '/Project/:Project_id',
+    "/Project/:Project_id",
     // New route for pdf-detach
-    '/Project/:Project_id/:detachRole(detacher|detached)',
+    "/Project/:Project_id/:detachRole(detacher|detached)",
   ]) {
     webRouter.get(
       route,
       RateLimiterMiddleware.rateLimit(openProjectRateLimiter, {
-        params: ['Project_id'],
+        params: ["Project_id"],
       }),
       AsyncLocalStorage.middleware,
       PermissionsController.useCapabilities(),
       AuthorizationMiddleware.ensureUserCanReadProject,
-      ProjectController.loadEditor
-    )
+      ProjectController.loadEditor,
+    );
   }
   webRouter.head(
-    '/Project/:Project_id/file/:File_id',
+    "/Project/:Project_id/file/:File_id",
     AuthorizationMiddleware.ensureUserCanReadProject,
-    FileStoreController.getFileHead
-  )
+    FileStoreController.getFileHead,
+  );
   webRouter.get(
-    '/Project/:Project_id/file/:File_id',
+    "/Project/:Project_id/file/:File_id",
     AuthorizationMiddleware.ensureUserCanReadProject,
-    FileStoreController.getFile
-  )
+    FileStoreController.getFile,
+  );
 
   webRouter.get(
-    '/Project/:Project_id/doc/:Doc_id/download', // "download" suffix to avoid conflict with private API route at doc/:doc_id
+    "/Project/:Project_id/doc/:Doc_id/download", // "download" suffix to avoid conflict with private API route at doc/:doc_id
     AuthorizationMiddleware.ensureUserCanReadProject,
-    DocumentUpdaterController.getDoc
-  )
+    DocumentUpdaterController.getDoc,
+  );
   webRouter.post(
-    '/project/:Project_id/settings',
+    "/project/:Project_id/settings",
     AuthorizationMiddleware.ensureUserCanWriteProjectSettings,
-    ProjectController.updateProjectSettings
-  )
+    ProjectController.updateProjectSettings,
+  );
   webRouter.post(
-    '/project/:Project_id/settings/admin',
+    "/project/:Project_id/settings/admin",
     AuthenticationController.requireLogin(),
     AuthorizationMiddleware.ensureUserCanAdminProject,
-    ProjectController.updateProjectAdminSettings
-  )
+    ProjectController.updateProjectAdminSettings,
+  );
 
   webRouter.post(
-    '/project/:Project_id/compile',
+    "/project/:Project_id/compile",
     RateLimiterMiddleware.rateLimit(rateLimiters.compileProjectHttp, {
-      params: ['Project_id'],
+      params: ["Project_id"],
     }),
     AsyncLocalStorage.middleware,
     AuthorizationMiddleware.ensureUserCanReadProject,
-    CompileController.compile
-  )
+    CompileController.compile,
+  );
 
   webRouter.post(
-    '/project/:Project_id/compile/stop',
+    "/project/:Project_id/compile/stop",
     AuthorizationMiddleware.ensureUserCanReadProject,
-    CompileController.stopCompile
-  )
+    CompileController.stopCompile,
+  );
+  webRouter.get(
+    "/project/:Project_id/jobs",
+    AuthorizationMiddleware.ensureUserCanReadProject,
+    RateLimiterMiddleware.rateLimit(rateLimiters.compileProjectHttp, {
+      params: ["Project_id"],
+    }),
+    CompileController.listJobs,
+  );
 
   webRouter.get(
-    '/project/:Project_id/output/cached/output.overleaf.json',
+    "/project/:Project_id/output/cached/output.overleaf.json",
     AsyncLocalStorage.middleware,
     AuthorizationMiddleware.ensureUserCanReadProject,
-    ClsiCacheController.getLatestBuildFromCache
-  )
+    ClsiCacheController.getLatestBuildFromCache,
+  );
 
   webRouter.get(
-    '/download/project/:Project_id/build/:editorBuildId/output/cached/:filename(.*)',
+    "/download/project/:Project_id/build/:editorBuildId/output/cached/:filename(.*)",
     AuthorizationMiddleware.ensureUserCanReadProject,
-    ClsiCacheController.downloadFromCache
-  )
+    ClsiCacheController.downloadFromCache,
+  );
 
   // PDF Download button for specific build
   webRouter.get(
-    '/download/project/:Project_id/build/:build_id/output/output.pdf',
+    "/download/project/:Project_id/build/:build_id/output/output.pdf",
     AuthorizationMiddleware.ensureUserCanReadProject,
-    CompileController.downloadPdf
-  )
+    CompileController.downloadPdf,
+  );
 
   // Align with limits defined in CompileController.downloadPdf
   const rateLimiterMiddlewareOutputFiles = RateLimiterMiddleware.rateLimit(
     rateLimiters.miscOutputDownload,
-    { params: ['Project_id'] }
-  )
+    { params: ["Project_id"] },
+  );
 
   // Download all the output files of a specific build
   webRouter.get(
-    '/project/:Project_id/build/:build_id/output/output.zip',
+    "/project/:Project_id/build/:build_id/output/output.zip",
     rateLimiterMiddlewareOutputFiles,
     AuthorizationMiddleware.ensureUserCanReadProject,
-    CompileController.getOutputZipFromClsi
-  )
+    CompileController.getOutputZipFromClsi,
+  );
   webRouter.get(
-    '/project/:Project_id/user/:user_id/build/:build_id/output/output.zip',
+    "/project/:Project_id/user/:user_id/build/:build_id/output/output.zip",
     rateLimiterMiddlewareOutputFiles,
     AuthorizationMiddleware.ensureUserCanReadProject,
-    CompileController.getOutputZipFromClsi
-  )
+    CompileController.getOutputZipFromClsi,
+  );
 
   // direct url access to output files for a specific build
   webRouter.get(
-    '/project/:Project_id/build/:build_id/output/:file(.*)',
+    "/project/:Project_id/build/:build_id/output/:file(.*)",
     rateLimiterMiddlewareOutputFiles,
     AuthorizationMiddleware.ensureUserCanReadProject,
-    CompileController.getFileFromClsi
-  )
+    CompileController.getFileFromClsi,
+  );
 
   // direct url access to output files for a specific user and build
   webRouter.get(
-    '/project/:Project_id/user/:user_id/build/:build_id/output/:file(.*)',
+    "/project/:Project_id/user/:user_id/build/:build_id/output/:file(.*)",
     rateLimiterMiddlewareOutputFiles,
     AuthorizationMiddleware.ensureUserCanReadProject,
-    CompileController.getFileFromClsi
-  )
+    CompileController.getFileFromClsi,
+  );
 
   webRouter.delete(
-    '/project/:Project_id/output',
+    "/project/:Project_id/output",
     AuthorizationMiddleware.ensureUserCanReadProject,
-    CompileController.deleteAuxFiles
-  )
+    CompileController.deleteAuxFiles,
+  );
   webRouter.get(
-    '/project/:Project_id/sync/code',
+    "/project/:Project_id/sync/code",
     AsyncLocalStorage.middleware,
     AuthorizationMiddleware.ensureUserCanReadProject,
-    CompileController.proxySyncCode
-  )
+    CompileController.proxySyncCode,
+  );
   webRouter.get(
-    '/project/:Project_id/sync/pdf',
+    "/project/:Project_id/sync/pdf",
     AsyncLocalStorage.middleware,
     AuthorizationMiddleware.ensureUserCanReadProject,
-    CompileController.proxySyncPdf
-  )
+    CompileController.proxySyncPdf,
+  );
   webRouter.get(
-    '/project/:Project_id/wordcount',
+    "/project/:Project_id/wordcount",
     AuthorizationMiddleware.ensureUserCanReadProject,
-    CompileController.wordCount
-  )
+    CompileController.wordCount,
+  );
 
   webRouter.post(
-    '/Project/:Project_id/archive',
+    "/Project/:Project_id/archive",
     AuthenticationController.requireLogin(),
     AuthorizationMiddleware.ensureUserCanReadProject,
-    ProjectController.archiveProject
-  )
+    ProjectController.archiveProject,
+  );
   webRouter.delete(
-    '/Project/:Project_id/archive',
+    "/Project/:Project_id/archive",
     AuthenticationController.requireLogin(),
     AuthorizationMiddleware.ensureUserCanReadProject,
-    ProjectController.unarchiveProject
-  )
+    ProjectController.unarchiveProject,
+  );
   webRouter.post(
-    '/project/:project_id/trash',
+    "/project/:project_id/trash",
     AuthenticationController.requireLogin(),
     AuthorizationMiddleware.ensureUserCanReadProject,
-    ProjectController.trashProject
-  )
+    ProjectController.trashProject,
+  );
   webRouter.delete(
-    '/project/:project_id/trash',
+    "/project/:project_id/trash",
     AuthenticationController.requireLogin(),
     AuthorizationMiddleware.ensureUserCanReadProject,
-    ProjectController.untrashProject
-  )
+    ProjectController.untrashProject,
+  );
 
   webRouter.delete(
-    '/Project/:Project_id',
+    "/Project/:Project_id",
     AuthenticationController.requireLogin(),
     AuthorizationMiddleware.ensureUserCanAdminProject,
-    ProjectController.deleteProject
-  )
+    ProjectController.deleteProject,
+  );
 
   webRouter.post(
-    '/Project/:Project_id/restore',
+    "/Project/:Project_id/restore",
     AuthenticationController.requireLogin(),
     AuthorizationMiddleware.ensureUserCanAdminProject,
-    ProjectController.restoreProject
-  )
+    ProjectController.restoreProject,
+  );
   webRouter.post(
-    '/Project/:Project_id/clone',
+    "/Project/:Project_id/clone",
     AuthorizationMiddleware.ensureUserCanReadProject,
-    ProjectController.cloneProject
-  )
+    ProjectController.cloneProject,
+  );
 
   webRouter.post(
-    '/project/:Project_id/rename',
+    "/project/:Project_id/rename",
     AuthenticationController.requireLogin(),
     AuthorizationMiddleware.ensureUserCanAdminProject,
-    ProjectController.renameProject
-  )
+    ProjectController.renameProject,
+  );
   webRouter.post(
-    '/project/:project_id/export/:brand_variation_id',
+    "/project/:project_id/export/:brand_variation_id",
     AuthorizationMiddleware.ensureUserCanWriteProjectContent,
-    ExportsController.exportProject
-  )
+    ExportsController.exportProject,
+  );
   webRouter.get(
-    '/project/:project_id/export/:export_id',
+    "/project/:project_id/export/:export_id",
     AuthorizationMiddleware.ensureUserCanWriteProjectContent,
-    ExportsController.exportStatus
-  )
+    ExportsController.exportStatus,
+  );
   webRouter.get(
-    '/project/:project_id/export/:export_id/:type',
+    "/project/:project_id/export/:export_id/:type",
     AuthorizationMiddleware.ensureUserCanWriteProjectContent,
-    ExportsController.exportDownload
-  )
+    ExportsController.exportDownload,
+  );
 
   if (Settings.enablePandocConversions) {
     webRouter.get(
-      '/project/:Project_id/download/conversion/:type',
+      "/project/:Project_id/download/conversion/:type",
       AuthenticationController.requireLogin(),
       RateLimiterMiddleware.rateLimit(rateLimiters.documentExport, {
-        params: ['Project_id'],
+        params: ["Project_id"],
       }),
       AuthorizationMiddleware.ensureUserCanReadProject,
-      ProjectDownloadsController.exportProjectConversion
-    )
+      ProjectDownloadsController.exportProjectConversion,
+    );
     webRouter.get(
-      '/project/:Project_id/download/conversion/:conversionId/:type/build/:buildId/output/:file(.*)',
+      "/project/:Project_id/download/conversion/:conversionId/:type/build/:buildId/output/:file(.*)",
       AuthenticationController.requireLogin(),
       RateLimiterMiddleware.rateLimit(rateLimiters.documentExportDownload, {
-        params: ['Project_id'],
+        params: ["Project_id"],
       }),
       AuthorizationMiddleware.ensureUserCanReadProject,
-      ProjectDownloadsController.downloadPreparedProjectExport
-    )
+      ProjectDownloadsController.downloadPreparedProjectExport,
+    );
   }
 
   webRouter.get(
-    '/Project/:Project_id/download/zip',
+    "/Project/:Project_id/download/zip",
     RateLimiterMiddleware.rateLimit(rateLimiters.zipDownload, {
-      params: ['Project_id'],
+      params: ["Project_id"],
     }),
     AuthorizationMiddleware.ensureUserCanReadProject,
-    ProjectDownloadsController.downloadProject
-  )
+    ProjectDownloadsController.downloadProject,
+  );
   webRouter.get(
-    '/project/download/zip',
+    "/project/download/zip",
     AuthenticationController.requireLogin(),
     RateLimiterMiddleware.rateLimit(rateLimiters.multipleProjectsZipDownload),
     AuthorizationMiddleware.ensureUserCanReadMultipleProjects,
-    ProjectDownloadsController.downloadMultipleProjects
-  )
+    ProjectDownloadsController.downloadMultipleProjects,
+  );
 
   webRouter.get(
-    '/project/:project_id/metadata',
+    "/project/:project_id/metadata",
     AsyncLocalStorage.middleware,
     AuthorizationMiddleware.ensureUserCanReadProject,
     Settings.allowAnonymousReadAndWriteSharing
       ? (req, res, next) => {
-          next()
+          next();
         }
       : AuthenticationController.requireLogin(),
-    MetaController.getMetadata
-  )
+    MetaController.getMetadata,
+  );
   webRouter.post(
-    '/project/:project_id/doc/:doc_id/metadata',
+    "/project/:project_id/doc/:doc_id/metadata",
     AsyncLocalStorage.middleware,
     AuthorizationMiddleware.ensureUserCanReadProject,
     Settings.allowAnonymousReadAndWriteSharing
       ? (req, res, next) => {
-          next()
+          next();
         }
       : AuthenticationController.requireLogin(),
-    MetaController.broadcastMetadataForDoc
-  )
+    MetaController.broadcastMetadataForDoc,
+  );
   privateApiRouter.post(
-    '/internal/expire-deleted-projects-after-duration',
+    "/internal/expire-deleted-projects-after-duration",
     AuthenticationController.requirePrivateApiAuth(),
-    ProjectController.expireDeletedProjectsAfterDuration
-  )
+    ProjectController.expireDeletedProjectsAfterDuration,
+  );
   privateApiRouter.post(
-    '/internal/expire-deleted-users-after-duration',
+    "/internal/expire-deleted-users-after-duration",
     AuthenticationController.requirePrivateApiAuth(),
-    UserController.expireDeletedUsersAfterDuration
-  )
+    UserController.expireDeletedUsersAfterDuration,
+  );
   privateApiRouter.post(
-    '/internal/project/:projectId/expire-deleted-project',
+    "/internal/project/:projectId/expire-deleted-project",
     AuthenticationController.requirePrivateApiAuth(),
-    ProjectController.expireDeletedProject
-  )
+    ProjectController.expireDeletedProject,
+  );
   privateApiRouter.post(
-    '/internal/users/:userId/expire',
+    "/internal/users/:userId/expire",
     AuthenticationController.requirePrivateApiAuth(),
-    UserController.expireDeletedUser
-  )
+    UserController.expireDeletedUser,
+  );
 
   privateApiRouter.get(
-    '/user/:userId/tag',
+    "/user/:userId/tag",
     AuthenticationController.requirePrivateApiAuth(),
-    TagsController.apiGetAllTags
-  )
+    TagsController.apiGetAllTags,
+  );
   webRouter.get(
-    '/tag',
+    "/tag",
     AuthenticationController.requireLogin(),
-    TagsController.getAllTags
-  )
+    TagsController.getAllTags,
+  );
   webRouter.post(
-    '/tag',
+    "/tag",
     AuthenticationController.requireLogin(),
     RateLimiterMiddleware.rateLimit(rateLimiters.createTag),
-    TagsController.createTag
-  )
+    TagsController.createTag,
+  );
   webRouter.post(
-    '/tag/:tagId/rename',
+    "/tag/:tagId/rename",
     AuthenticationController.requireLogin(),
     RateLimiterMiddleware.rateLimit(rateLimiters.renameTag),
-    TagsController.renameTag
-  )
+    TagsController.renameTag,
+  );
   webRouter.post(
-    '/tag/:tagId/edit',
+    "/tag/:tagId/edit",
     AuthenticationController.requireLogin(),
     RateLimiterMiddleware.rateLimit(rateLimiters.renameTag),
-    TagsController.editTag
-  )
+    TagsController.editTag,
+  );
   webRouter.delete(
-    '/tag/:tagId',
+    "/tag/:tagId",
     AuthenticationController.requireLogin(),
     RateLimiterMiddleware.rateLimit(rateLimiters.deleteTag),
-    TagsController.deleteTag
-  )
+    TagsController.deleteTag,
+  );
   webRouter.post(
-    '/tag/:tagId/project/:projectId',
+    "/tag/:tagId/project/:projectId",
     AuthenticationController.requireLogin(),
     RateLimiterMiddleware.rateLimit(rateLimiters.addProjectToTag),
-    TagsController.addProjectToTag
-  )
+    TagsController.addProjectToTag,
+  );
   webRouter.post(
-    '/tag/:tagId/projects',
+    "/tag/:tagId/projects",
     AuthenticationController.requireLogin(),
     RateLimiterMiddleware.rateLimit(rateLimiters.addProjectsToTag),
-    TagsController.addProjectsToTag
-  )
+    TagsController.addProjectsToTag,
+  );
   webRouter.delete(
-    '/tag/:tagId/project/:projectId',
+    "/tag/:tagId/project/:projectId",
     AuthenticationController.requireLogin(),
     RateLimiterMiddleware.rateLimit(rateLimiters.removeProjectFromTag),
-    TagsController.removeProjectFromTag
-  )
+    TagsController.removeProjectFromTag,
+  );
   webRouter.post(
-    '/tag/:tagId/projects/remove',
+    "/tag/:tagId/projects/remove",
     AuthenticationController.requireLogin(),
     RateLimiterMiddleware.rateLimit(rateLimiters.removeProjectsFromTag),
-    TagsController.removeProjectsFromTag
-  )
+    TagsController.removeProjectsFromTag,
+  );
 
   webRouter.get(
-    '/notifications',
+    "/notifications",
     AuthenticationController.requireLogin(),
-    NotificationsController.getAllUnreadNotifications
-  )
+    NotificationsController.getAllUnreadNotifications,
+  );
   webRouter.delete(
-    '/notifications/:notificationId',
+    "/notifications/:notificationId",
     AuthenticationController.requireLogin(),
-    NotificationsController.markNotificationAsRead
-  )
+    NotificationsController.markNotificationAsRead,
+  );
 
   webRouter.get(
-    '/user/notification/:notificationId',
+    "/user/notification/:notificationId",
     AuthenticationController.requireLogin(),
-    NotificationsController.getNotification
-  )
+    NotificationsController.getNotification,
+  );
 
   // Deprecated in favour of /internal/project/:project_id but still used by versioning
   privateApiRouter.get(
-    '/project/:project_id/details',
+    "/project/:project_id/details",
     AuthenticationController.requirePrivateApiAuth(),
-    ProjectApiController.getProjectDetails
-  )
+    ProjectApiController.getProjectDetails,
+  );
 
   // New 'stable' /internal API end points
   privateApiRouter.get(
-    '/internal/project/:project_id',
+    "/internal/project/:project_id",
     AuthenticationController.requirePrivateApiAuth(),
-    ProjectApiController.getProjectDetails
-  )
+    ProjectApiController.getProjectDetails,
+  );
   privateApiRouter.get(
-    '/internal/project/:Project_id/zip',
+    "/internal/project/:Project_id/zip",
     AuthenticationController.requirePrivateApiAuth(),
-    ProjectDownloadsController.downloadProject
-  )
+    ProjectDownloadsController.downloadProject,
+  );
   privateApiRouter.get(
-    '/internal/project/:project_id/compile/pdf',
+    "/internal/project/:project_id/compile/pdf",
     AuthenticationController.requirePrivateApiAuth(),
-    CompileController.compileAndDownloadPdf
-  )
+    CompileController.compileAndDownloadPdf,
+  );
 
   privateApiRouter.post(
-    '/internal/deactivateOldProjects',
+    "/internal/deactivateOldProjects",
     AuthenticationController.requirePrivateApiAuth(),
-    InactiveProjectController.deactivateOldProjects
-  )
+    InactiveProjectController.deactivateOldProjects,
+  );
   privateApiRouter.post(
-    '/internal/project/:project_id/deactivate',
+    "/internal/project/:project_id/deactivate",
     AuthenticationController.requirePrivateApiAuth(),
-    InactiveProjectController.deactivateProject
-  )
+    InactiveProjectController.deactivateProject,
+  );
 
   privateApiRouter.get(
-    '/project/:Project_id/doc/:doc_id',
+    "/project/:Project_id/doc/:doc_id",
     AuthenticationController.requirePrivateApiAuth(),
-    DocumentController.getDocument
-  )
+    DocumentController.getDocument,
+  );
   privateApiRouter.post(
-    '/project/:Project_id/doc/:doc_id',
+    "/project/:Project_id/doc/:doc_id",
     AuthenticationController.requirePrivateApiAuth(),
-    DocumentController.setDocument
-  )
+    DocumentController.setDocument,
+  );
   privateApiRouter.post(
-    '/project/:Project_id/doc/:doc_id/changes/reject',
+    "/project/:Project_id/doc/:doc_id/changes/reject",
     AuthenticationController.requirePrivateApiAuth(),
-    DocumentController.trackChangesRejected
-  )
+    DocumentController.trackChangesRejected,
+  );
 
   privateApiRouter.post(
-    '/user/:user_id/project/new',
+    "/user/:user_id/project/new",
     AuthenticationController.requirePrivateApiAuth(),
-    TpdsController.createProject
-  )
+    TpdsController.createProject,
+  );
   privateApiRouter.post(
-    '/tpds/folder-update',
+    "/tpds/folder-update",
     AuthenticationController.requirePrivateApiAuth(),
-    TpdsController.updateFolder
-  )
+    TpdsController.updateFolder,
+  );
   privateApiRouter.post(
-    '/user/:user_id/update/*',
+    "/user/:user_id/update/*",
     AuthenticationController.requirePrivateApiAuth(),
-    TpdsController.mergeUpdate
-  )
+    TpdsController.mergeUpdate,
+  );
   privateApiRouter.delete(
-    '/user/:user_id/update/*',
+    "/user/:user_id/update/*",
     AuthenticationController.requirePrivateApiAuth(),
-    TpdsController.deleteUpdate
-  )
+    TpdsController.deleteUpdate,
+  );
   privateApiRouter.post(
-    '/project/:project_id/user/:user_id/update/*',
+    "/project/:project_id/user/:user_id/update/*",
     AuthenticationController.requirePrivateApiAuth(),
-    TpdsController.mergeUpdate
-  )
+    TpdsController.mergeUpdate,
+  );
   privateApiRouter.delete(
-    '/project/:project_id/user/:user_id/update/*',
+    "/project/:project_id/user/:user_id/update/*",
     AuthenticationController.requirePrivateApiAuth(),
-    TpdsController.deleteUpdate
-  )
+    TpdsController.deleteUpdate,
+  );
 
   privateApiRouter.post(
-    '/project/:project_id/contents/*',
+    "/project/:project_id/contents/*",
     AuthenticationController.requirePrivateApiAuth(),
-    TpdsController.updateProjectContents
-  )
+    TpdsController.updateProjectContents,
+  );
   privateApiRouter.delete(
-    '/project/:project_id/contents/*',
+    "/project/:project_id/contents/*",
     AuthenticationController.requirePrivateApiAuth(),
-    TpdsController.deleteProjectContents
-  )
+    TpdsController.deleteProjectContents,
+  );
 
   webRouter.post(
-    '/spelling/learn',
+    "/spelling/learn",
     AuthenticationController.requireLogin(),
-    SpellingController.learn
-  )
+    SpellingController.learn,
+  );
 
   webRouter.post(
-    '/spelling/unlearn',
+    "/spelling/unlearn",
     AuthenticationController.requireLogin(),
-    SpellingController.unlearn
-  )
+    SpellingController.unlearn,
+  );
 
-  if (Features.hasFeature('chat')) {
+  if (Features.hasFeature("chat")) {
     webRouter.get(
-      '/project/:project_id/messages',
+      "/project/:project_id/messages",
       AuthorizationMiddleware.blockRestrictedUserFromProject,
       AuthorizationMiddleware.ensureUserCanReadProject,
-      PermissionsController.requirePermission('chat'),
-      ChatController.getMessages
-    )
+      PermissionsController.requirePermission("chat"),
+      ChatController.getMessages,
+    );
     webRouter.post(
-      '/project/:project_id/messages',
+      "/project/:project_id/messages",
       AuthorizationMiddleware.blockRestrictedUserFromProject,
       AuthorizationMiddleware.ensureUserCanReadProject,
-      PermissionsController.requirePermission('chat'),
+      PermissionsController.requirePermission("chat"),
       RateLimiterMiddleware.rateLimit(rateLimiters.sendChatMessage),
-      ChatController.sendMessage
-    )
+      ChatController.sendMessage,
+    );
     webRouter.delete(
-      '/project/:project_id/messages/:message_id',
+      "/project/:project_id/messages/:message_id",
       AuthorizationMiddleware.blockRestrictedUserFromProject,
       AuthorizationMiddleware.ensureUserCanReadProject,
       AuthorizationMiddleware.ensureUserIsMessageAuthor,
-      PermissionsController.requirePermission('chat'),
-      ChatController.deleteMessage
-    )
+      PermissionsController.requirePermission("chat"),
+      ChatController.deleteMessage,
+    );
     webRouter.post(
-      '/project/:project_id/messages/:message_id/edit',
+      "/project/:project_id/messages/:message_id/edit",
       AuthorizationMiddleware.blockRestrictedUserFromProject,
       AuthorizationMiddleware.ensureUserCanReadProject,
       AuthorizationMiddleware.ensureUserIsMessageAuthor,
-      PermissionsController.requirePermission('chat'),
-      ChatController.editMessage
-    )
+      PermissionsController.requirePermission("chat"),
+      ChatController.editMessage,
+    );
   }
 
   webRouter.post(
-    '/project/:Project_id/references/indexAll',
+    "/project/:Project_id/references/indexAll",
     AuthorizationMiddleware.ensureUserCanReadProject,
     RateLimiterMiddleware.rateLimit(rateLimiters.indexAllProjectReferences),
-    ReferencesController.indexAll
-  )
+    ReferencesController.indexAll,
+  );
 
   // disable beta program while v2 is in beta
   webRouter.get(
-    '/beta/participate',
+    "/beta/participate",
     AuthenticationController.requireLogin(),
-    BetaProgramController.optInPage
-  )
+    BetaProgramController.optInPage,
+  );
   webRouter.post(
-    '/beta/opt-in',
+    "/beta/opt-in",
     AuthenticationController.requireLogin(),
-    BetaProgramController.optIn
-  )
+    BetaProgramController.optIn,
+  );
   webRouter.post(
-    '/beta/opt-out',
+    "/beta/opt-out",
     AuthenticationController.requireLogin(),
-    BetaProgramController.optOut
-  )
+    BetaProgramController.optOut,
+  );
+  webRouter.get(
+    "/admin/audit",
+    AuthorizationMiddleware.ensureUserIsSiteAdmin,
+    (req, res) => res.render("admin/audit"),
+  );
+  webRouter.get(
+    "/admin/api/audit",
+    AuthorizationMiddleware.ensureUserIsSiteAdmin,
+    RateLimiterMiddleware.rateLimit(rateLimiters.adminAuditRead),
+    AuditLogController.query,
+  );
 
-  webRouter.get('/chrome', function (req, res, next) {
+  webRouter.get("/chrome", function (req, res, next) {
     // Match v1 behaviour - this is used for a Chrome web app
     if (SessionManager.isUserLoggedIn(req.session)) {
-      res.redirect('/project')
+      res.redirect("/project");
     } else {
-      res.redirect('/register')
+      res.redirect("/register");
     }
-  })
+  });
 
   webRouter.get(
-    '/admin',
+    "/admin",
     AuthorizationMiddleware.ensureUserIsSiteAdmin,
-    AdminController.index
-  )
+    AdminController.index,
+  );
 
-  if (!Features.hasFeature('saas')) {
+  webRouter.get(
+    "/admin/users",
+    AuthorizationMiddleware.ensureUserIsSiteAdmin,
+    (req, res) => res.render("admin/users"),
+  );
+  webRouter.get(
+    "/admin/users/:userId",
+    AuthorizationMiddleware.ensureUserIsSiteAdmin,
+    (req, res) => res.render("admin/user-detail"),
+  );
+  webRouter.get(
+    "/admin/jobs",
+    AuthorizationMiddleware.ensureUserIsSiteAdmin,
+    (req, res) => res.render("admin/jobs"),
+  );
+  webRouter.get(
+    "/admin/workers",
+    AuthorizationMiddleware.ensureUserIsSiteAdmin,
+    (req, res) => res.render("admin/workers"),
+  );
+
+  if (!Features.hasFeature("saas")) {
     webRouter.post(
-      '/admin/openEditor',
+      "/admin/openEditor",
       AuthorizationMiddleware.ensureUserIsSiteAdmin,
-      AdminController.openEditor
-    )
+      AdminController.openEditor,
+    );
     webRouter.post(
-      '/admin/closeEditor',
+      "/admin/closeEditor",
       AuthorizationMiddleware.ensureUserIsSiteAdmin,
-      AdminController.closeEditor
-    )
+      AdminController.closeEditor,
+    );
     webRouter.post(
-      '/admin/disconnectAllUsers',
+      "/admin/disconnectAllUsers",
       AuthorizationMiddleware.ensureUserIsSiteAdmin,
-      AdminController.disconnectAllUsers
-    )
+      AdminController.disconnectAllUsers,
+    );
   }
   webRouter.post(
-    '/admin/flushProjectToTpds',
+    "/admin/flushProjectToTpds",
     AuthorizationMiddleware.ensureUserIsSiteAdmin,
-    AdminController.flushProjectToTpds
-  )
+    AdminController.flushProjectToTpds,
+  );
   webRouter.post(
-    '/admin/pollDropboxForUser',
+    "/admin/pollDropboxForUser",
     AuthorizationMiddleware.ensureUserIsSiteAdmin,
-    AdminController.pollDropboxForUser
-  )
+    AdminController.pollDropboxForUser,
+  );
   webRouter.post(
-    '/admin/messages',
+    "/admin/messages",
     AuthorizationMiddleware.ensureUserIsSiteAdmin,
-    AdminController.createMessage
-  )
+    AdminController.createMessage,
+  );
   webRouter.post(
-    '/admin/messages/clear',
+    "/admin/messages/clear",
     AuthorizationMiddleware.ensureUserIsSiteAdmin,
-    AdminController.clearMessages
-  )
+    AdminController.clearMessages,
+  );
 
-  privateApiRouter.get('/perfTest', (req, res) => {
-    plainTextResponse(res, 'hello')
-  })
+  privateApiRouter.post("/internal/audit", AuditLogController.record);
+  privateApiRouter.get("/perfTest", (req, res) => {
+    plainTextResponse(res, "hello");
+  });
 
-  publicApiRouter.get('/status', (req, res) => {
+  publicApiRouter.get("/status", (req, res) => {
     if (Settings.shuttingDown) {
-      res.sendStatus(503) // Service unavailable
+      res.sendStatus(503); // Service unavailable
     } else if (!Settings.siteIsOpen) {
-      plainTextResponse(res, 'web site is closed (web)')
+      plainTextResponse(res, "web site is closed (web)");
     } else if (!Settings.editorIsOpen) {
-      plainTextResponse(res, 'web editor is closed (web)')
+      plainTextResponse(res, "web editor is closed (web)");
     } else {
-      plainTextResponse(res, 'web is alive (web)')
+      plainTextResponse(res, "web is alive (web)");
     }
-  })
-  privateApiRouter.get('/status', (req, res) => {
-    plainTextResponse(res, 'web is alive (api)')
-  })
+  });
+  privateApiRouter.get("/status", (req, res) => {
+    plainTextResponse(res, "web is alive (api)");
+  });
 
   // used by kubernetes health-check and acceptance tests
-  webRouter.get('/dev/csrf', (req, res) => {
-    plainTextResponse(res, res.locals.csrfToken)
-  })
+  webRouter.get("/dev/csrf", (req, res) => {
+    plainTextResponse(res, res.locals.csrfToken);
+  });
 
   privateApiRouter.get(
-    '/health_check',
+    "/health_check",
     HealthCheckController.checkActiveHandles,
-    HealthCheckController.checkApi
-  )
+    HealthCheckController.checkApi,
+  );
   publicApiRouter.get(
-    '/health_check/api',
+    "/health_check/api",
     HealthCheckController.checkActiveHandles,
-    HealthCheckController.checkApi
-  )
+    HealthCheckController.checkApi,
+  );
   privateApiRouter.get(
-    '/health_check/api',
+    "/health_check/api",
     HealthCheckController.checkActiveHandles,
-    HealthCheckController.checkApi
-  )
+    HealthCheckController.checkApi,
+  );
 
-  publicApiRouter.get('/health_check/redis', HealthCheckController.checkRedis)
-  privateApiRouter.get('/health_check/redis', HealthCheckController.checkRedis)
+  publicApiRouter.get("/health_check/redis", HealthCheckController.checkRedis);
+  privateApiRouter.get("/health_check/redis", HealthCheckController.checkRedis);
 
-  publicApiRouter.get('/health_check/mongo', HealthCheckController.checkMongo)
-  privateApiRouter.get('/health_check/mongo', HealthCheckController.checkMongo)
+  publicApiRouter.get("/health_check/mongo", HealthCheckController.checkMongo);
+  privateApiRouter.get("/health_check/mongo", HealthCheckController.checkMongo);
 
   webRouter.get(
-    '/status/compiler/:Project_id',
+    "/status/compiler/:Project_id",
     RateLimiterMiddleware.rateLimit(rateLimiters.statusCompiler),
     AuthorizationMiddleware.ensureUserCanReadProject,
     function (req, res) {
-      const projectId = req.params.Project_id
+      const projectId = req.params.Project_id;
       // use a valid user id for testing
-      const testUserId = '123456789012345678901234'
+      const testUserId = "123456789012345678901234";
       const sendRes = _.once(function (statusCode, message, clsiServerId) {
-        res.status(statusCode)
-        plainTextResponse(res, message)
+        res.status(statusCode);
+        plainTextResponse(res, message);
         // Force every compile to a new server and do not leave cruft behind.
         CompileManager.promises
           .deleteAuxFiles(projectId, testUserId, clsiServerId)
-          .catch(() => {})
-      })
+          .catch(() => {});
+      });
       let handler = setTimeout(function () {
         CompileManager.promises
           .stopCompile(projectId, testUserId)
-          .catch(() => {})
-        sendRes(500, 'Compiler timed out')
-        handler = null
-      }, 10000)
+          .catch(() => {});
+        sendRes(500, "Compiler timed out");
+        handler = null;
+      }, 10000);
       CompileManager.compile(
         projectId,
         testUserId,
         {
-          metricsPath: 'health-check',
+          metricsPath: "health-check",
           compileFromHistory: true,
-          rootResourcePath: 'main.tex',
+          rootResourcePath: "main.tex",
         },
         function (error, status, _outputFiles, clsiServerId) {
           if (handler) {
-            clearTimeout(handler)
+            clearTimeout(handler);
           }
           if (error) {
             sendRes(
               500,
               `Compiler returned error ${error.message}`,
-              clsiServerId
-            )
-          } else if (status === 'success') {
+              clsiServerId,
+            );
+          } else if (status === "success") {
             sendRes(
               200,
-              'Compiler returned in less than 10 seconds',
-              clsiServerId
-            )
+              "Compiler returned in less than 10 seconds",
+              clsiServerId,
+            );
           } else {
-            sendRes(500, `Compiler returned failure ${status}`, clsiServerId)
+            sendRes(500, `Compiler returned failure ${status}`, clsiServerId);
           }
-        }
-      )
-    }
-  )
+        },
+      );
+    },
+  );
 
-  webRouter.post('/error/client', function (req, res, next) {
+  webRouter.post("/error/client", function (req, res, next) {
     logger.warn(
       { err: req.body.error, meta: req.body.meta },
-      'client side error'
-    )
-    metrics.inc('client-side-error')
-    res.sendStatus(204)
-  })
+      "client side error",
+    );
+    metrics.inc("client-side-error");
+    res.sendStatus(204);
+  });
 
-  if (Features.hasFeature('link-sharing')) {
+  if (Features.hasFeature("link-sharing")) {
     webRouter.get(
       `/read/:token(${TokenAccessController.READ_ONLY_TOKEN_PATTERN})`,
       RateLimiterMiddleware.rateLimit(rateLimiters.readOnlyToken),
       AnalyticsRegistrationSourceMiddleware.setSource(
-        'collaboration',
-        'link-sharing'
+        "collaboration",
+        "link-sharing",
       ),
       TokenAccessController.tokenAccessPage,
-      AnalyticsRegistrationSourceMiddleware.clearSource()
-    )
+      AnalyticsRegistrationSourceMiddleware.clearSource(),
+    );
 
     webRouter.get(
       `/:token(${TokenAccessController.READ_AND_WRITE_TOKEN_PATTERN})`,
       RateLimiterMiddleware.rateLimit(rateLimiters.readAndWriteToken),
       AnalyticsRegistrationSourceMiddleware.setSource(
-        'collaboration',
-        'link-sharing'
+        "collaboration",
+        "link-sharing",
       ),
       TokenAccessController.tokenAccessPage,
-      AnalyticsRegistrationSourceMiddleware.clearSource()
-    )
+      AnalyticsRegistrationSourceMiddleware.clearSource(),
+    );
 
     webRouter.post(
       `/:token(${TokenAccessController.READ_AND_WRITE_TOKEN_PATTERN})/grant`,
       RateLimiterMiddleware.rateLimit(rateLimiters.grantTokenAccessReadWrite),
-      TokenAccessController.grantTokenAccessReadAndWrite
-    )
+      TokenAccessController.grantTokenAccessReadAndWrite,
+    );
 
     webRouter.post(
       `/read/:token(${TokenAccessController.READ_ONLY_TOKEN_PATTERN})/grant`,
       RateLimiterMiddleware.rateLimit(rateLimiters.grantTokenAccessReadOnly),
-      TokenAccessController.grantTokenAccessReadOnly
-    )
+      TokenAccessController.grantTokenAccessReadOnly,
+    );
   }
 
-  webRouter.get('/unsupported-browser', renderUnsupportedBrowserPage)
+  webRouter.get("/unsupported-browser", renderUnsupportedBrowserPage);
 
-  webRouter.get('*', ErrorController.notFound)
+  webRouter.get("*", ErrorController.notFound);
 }
 
-export default { initialize, rateLimiters }
+export default { initialize, rateLimiters };

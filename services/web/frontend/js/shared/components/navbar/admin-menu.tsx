@@ -1,7 +1,7 @@
-import type { DefaultNavbarMetadata } from '@/shared/components/types/default-navbar-metadata'
-import NavDropdownMenu from '@/shared/components/navbar/nav-dropdown-menu'
-import NavDropdownLinkItem from '@/shared/components/navbar/nav-dropdown-link-item'
-import { useSendProjectListMB } from '@/features/project-list/components/project-list-events'
+import type { DefaultNavbarMetadata } from "@/shared/components/types/default-navbar-metadata";
+import NavDropdownMenu from "@/shared/components/navbar/nav-dropdown-menu";
+import NavDropdownLinkItem from "@/shared/components/navbar/nav-dropdown-link-item";
+import { useSendProjectListMB } from "@/features/project-list/components/project-list-events";
 
 export default function AdminMenu({
   canDisplayAdminMenu,
@@ -13,25 +13,25 @@ export default function AdminMenu({
   adminUrl,
 }: Pick<
   DefaultNavbarMetadata,
-  | 'canDisplayAdminMenu'
-  | 'canDisplayAdminRedirect'
-  | 'canDisplayProjectUrlLookup'
-  | 'canDisplaySplitTestMenu'
-  | 'canDisplaySurveyMenu'
-  | 'canDisplayScriptLogMenu'
-  | 'adminUrl'
+  | "canDisplayAdminMenu"
+  | "canDisplayAdminRedirect"
+  | "canDisplayProjectUrlLookup"
+  | "canDisplaySplitTestMenu"
+  | "canDisplaySurveyMenu"
+  | "canDisplayScriptLogMenu"
+  | "adminUrl"
 >) {
-  const sendProjectListMB = useSendProjectListMB()
+  const sendProjectListMB = useSendProjectListMB();
   return (
     <NavDropdownMenu
       title="Admin"
       className="subdued"
-      onToggle={nextShow => {
+      onToggle={(nextShow) => {
         if (nextShow) {
-          sendProjectListMB('menu-expand', {
-            item: 'admin',
-            location: 'top-menu',
-          })
+          sendProjectListMB("menu-expand", {
+            item: "admin",
+            location: "top-menu",
+          });
         }
       }}
     >
@@ -40,6 +40,15 @@ export default function AdminMenu({
           <NavDropdownLinkItem href="/admin">Manage Site</NavDropdownLinkItem>
           <NavDropdownLinkItem href="/admin/user">
             Manage Users
+          </NavDropdownLinkItem>
+          <NavDropdownLinkItem href="/admin/users">
+            User Management
+          </NavDropdownLinkItem>
+          <NavDropdownLinkItem href="/admin/jobs">
+            Compile Jobs
+          </NavDropdownLinkItem>
+          <NavDropdownLinkItem href="/admin/workers">
+            Workers
           </NavDropdownLinkItem>
         </>
       ) : null}
@@ -69,5 +78,5 @@ export default function AdminMenu({
         </NavDropdownLinkItem>
       ) : null}
     </NavDropdownMenu>
-  )
+  );
 }

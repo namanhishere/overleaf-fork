@@ -1,52 +1,53 @@
-import OError from '@overleaf/o-error'
-import logger from '@overleaf/logger'
-import { UserAuditLogEntry } from '../../models/UserAuditLogEntry.mjs'
-import { callbackify } from 'node:util'
-import SubscriptionLocator from '../Subscription/SubscriptionLocator.mjs'
-import Features from '../../infrastructure/Features.mjs'
+import OError from "@overleaf/o-error";
+import logger from "@overleaf/logger";
+import { UserAuditLogEntry } from "../../models/UserAuditLogEntry.mjs";
+import { callbackify } from "node:util";
+import SubscriptionLocator from "../Subscription/SubscriptionLocator.mjs";
+import Features from "../../infrastructure/Features.mjs";
+import AuditLogManager from "../Audit/AuditLogManager.mjs";
 
 function _canHaveNoIpAddressId(operation, info) {
-  if (operation === 'add-email' && info.script) return true
-  if (operation === 'join-group-subscription') return true
-  if (operation === 'leave-group-subscription') return true
-  if (operation === 'must-reset-password-set') return true
-  if (operation === 'remove-email' && info.script) return true
-  if (operation === 'release-managed-user' && info.script) return true
-  if (operation === 'unlink-dropbox' && info.batch) return true
-  return false
+  if (operation === "add-email" && info.script) return true;
+  if (operation === "join-group-subscription") return true;
+  if (operation === "leave-group-subscription") return true;
+  if (operation === "must-reset-password-set") return true;
+  if (operation === "remove-email" && info.script) return true;
+  if (operation === "release-managed-user" && info.script) return true;
+  if (operation === "unlink-dropbox" && info.batch) return true;
+  return false;
 }
 
 function _canHaveNoInitiatorId(operation, info) {
-  if (operation === 'add-email' && info.script) return true
-  if (operation === 'reset-password') return true
-  if (operation === 'unlink-sso' && info.providerId === 'collabratec')
-    return true
-  if (operation === 'unlink-sso' && info.script === true) return true
-  if (operation === 'unlink-institution-sso-not-migrated') return true
-  if (operation === 'remove-email' && info.script) return true
-  if (operation === 'join-group-subscription') return true
-  if (operation === 'leave-group-subscription') return true
-  if (operation === 'must-reset-password-set') return true
-  if (operation === 'must-reset-password-unset') return true
-  if (operation === 'account-suspension' && info.script) return true
-  if (operation === 'release-managed-user' && info.script) return true
+  if (operation === "add-email" && info.script) return true;
+  if (operation === "reset-password") return true;
+  if (operation === "unlink-sso" && info.providerId === "collabratec")
+    return true;
+  if (operation === "unlink-sso" && info.script === true) return true;
+  if (operation === "unlink-institution-sso-not-migrated") return true;
+  if (operation === "remove-email" && info.script) return true;
+  if (operation === "join-group-subscription") return true;
+  if (operation === "leave-group-subscription") return true;
+  if (operation === "must-reset-password-set") return true;
+  if (operation === "must-reset-password-unset") return true;
+  if (operation === "account-suspension" && info.script) return true;
+  if (operation === "release-managed-user" && info.script) return true;
 }
 
 // events that are visible to managed user admins in Group Audit Logs view
 const MANAGED_GROUP_USER_EVENTS = [
-  'login',
-  'logout',
-  'reset-password',
-  'update-password',
-  'link-dropbox',
-  'unlink-dropbox',
-  'link-github',
-  'unlink-github',
-  'delete-account',
-  'leave-group-subscription',
-  'integration-account-linked',
-  'integration-account-unlinked',
-]
+  "login",
+  "logout",
+  "reset-password",
+  "update-password",
+  "link-dropbox",
+  "unlink-dropbox",
+  "link-github",
+  "unlink-github",
+  "delete-account",
+  "leave-group-subscription",
+  "integration-account-linked",
+  "integration-account-unlinked",
+];
 
 /**
  * Add an audit log entry
@@ -61,24 +62,24 @@ const MANAGED_GROUP_USER_EVENTS = [
  */
 async function addEntry(userId, operation, initiatorId, ipAddress, info = {}) {
   if (!operation) {
-    throw new OError('missing operation for audit log', {
+    throw new OError("missing operation for audit log", {
       initiatorId,
       ipAddress,
-    })
+    });
   }
 
   if (!ipAddress && !_canHaveNoIpAddressId(operation, info)) {
-    throw new OError('missing ipAddress for audit log', {
+    throw new OError("missing ipAddress for audit log", {
       operation,
       initiatorId,
-    })
+    });
   }
 
   if (!initiatorId && !_canHaveNoInitiatorId(operation, info)) {
-    throw new OError('missing initiatorId for audit log', {
+    throw new OError("missing initiatorId for audit log", {
       operation,
       ipAddress,
-    })
+    });
   }
 
   const entry = {
@@ -87,26 +88,46 @@ async function addEntry(userId, operation, initiatorId, ipAddress, info = {}) {
     initiatorId,
     info,
     ipAddress,
-  }
+  };
 
   if (
     MANAGED_GROUP_USER_EVENTS.includes(operation) &&
-    Features.hasFeature('saas')
+    Features.hasFeature("saas")
   ) {
     try {
       const managedSubscription =
         await SubscriptionLocator.promises.getUniqueManagedSubscriptionMemberOf(
-          userId
-        )
+          userId,
+        );
       if (managedSubscription) {
-        entry.managedSubscriptionId = managedSubscription._id
+        entry.managedSubscriptionId = managedSubscription._id;
       }
     } catch (err) {
-      logger.error({ err, userId }, 'failed to lookup managed subscription')
+      logger.error({ err, userId }, "failed to lookup managed subscription");
     }
   }
 
-  await UserAuditLogEntry.create(entry)
+  await UserAuditLogEntry.create(entry);
+
+  // Dual-write into the unified audit log. The legacy userAuditLogEntries
+  // collection stays authoritative for existing readers until the Phase 2
+  // consolidation migration; failures here are logged, never thrown.
+  await AuditLogManager.promises
+    .recordAudit({
+      actorId: initiatorId,
+      actorType: "user",
+      action: operation,
+      targetType: "user",
+      targetId: String(userId),
+      info,
+      ipAddress,
+    })
+    .catch((err) => {
+      logger.error(
+        { err, userId, operation },
+        "failed to mirror audit entry into unified audit log",
+      );
+    });
 }
 
 function addEntryInBackground(
@@ -114,15 +135,15 @@ function addEntryInBackground(
   operation,
   initiatorId,
   ipAddress,
-  info = {}
+  info = {},
 ) {
   // Intentionally not awaited
-  addEntry(userId, operation, initiatorId, ipAddress, info).catch(err => {
+  addEntry(userId, operation, initiatorId, ipAddress, info).catch((err) => {
     logger.error(
       { err, userId, operation, initiatorId, ipAddress, info },
-      'error adding user audit log entry'
-    )
-  })
+      "error adding user audit log entry",
+    );
+  });
 }
 
 const UserAuditLogHandler = {
@@ -132,6 +153,6 @@ const UserAuditLogHandler = {
     addEntry,
   },
   addEntryInBackground,
-}
+};
 
-export default UserAuditLogHandler
+export default UserAuditLogHandler;
