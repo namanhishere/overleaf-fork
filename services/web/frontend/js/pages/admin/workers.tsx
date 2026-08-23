@@ -1,6 +1,6 @@
 import { createRoot } from 'react-dom/client'
 import { useEffect, useState } from 'react'
-import { getJSON } from '@/infrastructure/fetch-json'
+import { getJSON, postJSON } from '@/infrastructure/fetch-json'
 
 type WorkerHealth = {
   id: string
@@ -27,6 +27,31 @@ function WorkersDashboard() {
     const timer = setInterval(refresh, 15000)
     return () => clearInterval(timer)
   }, [])
+
+  const [pinProjectId, setPinProjectId] = useState('')
+  const [pinWorkerId, setPinWorkerId] = useState('')
+  const [pinMessage, setPinMessage] = useState<string | null>(null)
+  const [pinError, setPinError] = useState<string | null>(null)
+
+  async function submitPin(e: React.FormEvent) {
+    e.preventDefault()
+    setPinError(null)
+    setPinMessage(null)
+    try {
+      const body = await postJSON('/admin/api/workers/pin', {
+        body: { projectId: pinProjectId.trim(), workerId: pinWorkerId || null },
+      })
+      setPinMessage(
+        body.workerId
+          ? `Project pinned to ${body.workerId}.`
+          : 'Pin cleared — project uses automatic placement.'
+      )
+      setPinProjectId('')
+      setPinWorkerId('')
+    } catch (err) {
+      setPinError(String((err as Error).message))
+    }
+  }
 
   return (
     <div>
@@ -79,6 +104,34 @@ function WorkersDashboard() {
           </tbody>
         </table>
       )}
+
+      <h2>Pin a project to a worker</h2>
+      <form onSubmit={submitPin}>
+        <select
+          value={pinWorkerId}
+          onChange={e => setPinWorkerId(e.target.value)}
+        >
+          <option value="">Automatic placement</option>
+          {(data ? data.workers : []).map(w => (
+            <option key={w.id} value={w.id}>
+              {w.id} {w.ok ? '' : '(unhealthy)'}
+            </option>
+          ))}
+        </select>{' '}
+        <input
+          type="text"
+          value={pinProjectId}
+          placeholder="Project ID (24 hex chars)"
+          required
+          size={30}
+          onChange={e => setPinProjectId(e.target.value)}
+        />{' '}
+        <button type="submit" className="btn btn-primary">
+          Pin
+        </button>
+      </form>
+      {pinError ? <p className="text-danger">{pinError}</p> : null}
+      {pinMessage ? <p className="text-success">{pinMessage}</p> : null}
     </div>
   )
 }

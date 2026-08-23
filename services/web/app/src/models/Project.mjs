@@ -38,6 +38,9 @@ export const ProjectSchema = new Schema(
     version: { type: Number }, // incremented for every change in the project structure (folders and filenames)
     publicAccesLevel: { type: String, default: 'private' },
     compiler: { type: String, default: settings.defaultLatexCompiler },
+    // Explicit compilation target: id of a configured worker from
+    // Settings.apis.clsi.workers. Null means automatic placement.
+    compileWorkerId: { type: String, default: null },
     spellCheckLanguage: { type: String, default: 'en' },
     deletedByExternalDataSource: { type: Boolean, default: false },
     description: { type: String, default: '' },

@@ -2,24 +2,18 @@ import Settings from "@overleaf/settings";
 import { fetchJson } from "@overleaf/fetch-utils";
 import { expressify } from "@overleaf/promise-utils";
 import RedisWrapper from "../../infrastructure/RedisWrapper.mjs";
+import WorkerRegistry from "../Compile/WorkerRegistry.mjs";
+import { Project } from "../../models/Project.mjs";
+import { ObjectId } from "../../infrastructure/mongodb.mjs";
+import SessionManager from "../Authentication/SessionManager.mjs";
+import AuditLogManager from "../Audit/AuditLogManager.mjs";
 
 const healthClient = RedisWrapper.client("job_queue");
 
-const HEALTH_CACHE_KEY = "admin:workers:health";
-const HEALTH_CACHE_TTL_SECONDS = 15;
-
+// Worker list comes from the shared registry (Settings.apis.clsi.workers
+// or the single default CLSI url).
 function configuredWorkers() {
-  const workers =
-    Settings.apis?.clsi?.workers ||
-    (Settings.apis?.clsi?.url
-      ? [
-          {
-            id: Settings.clsi?.CLSI_SERVER_ID || "clsi-0",
-            url: Settings.apis.clsi.url,
-          },
-        ]
-      : []);
-  return workers;
+  return WorkerRegistry.configuredWorkers();
 }
 
 async function probeWorker(worker) {
@@ -85,6 +79,33 @@ async function listWorkers(req, res) {
   res.json(result);
 }
 
+// POST /admin/api/workers/pin  { projectId, workerId | null }
+async function pinWorker(req, res) {
+  const projectId = String(req.body?.projectId || '');
+  const workerId = req.body?.workerId || null;
+  if (!/^[a-f0-9]{24}$/.test(projectId)) {
+    return res.status(400).json({ error: "missing or invalid projectId" });
+  }
+  if (workerId != null && WorkerRegistry.getWorker(workerId) == null) {
+    return res.status(400).json({ error: "unknown workerId" });
+  }
+  await Project.updateOne(
+    { _id: new ObjectId(projectId) },
+    { $set: { compileWorkerId: workerId } },
+  ).exec();
+  WorkerRegistry.invalidatePinCache(projectId);
+  await AuditLogManager.promises.recordAudit({
+    actorId: SessionManager.getLoggedInUserId(req.session),
+    action: workerId == null ? "worker-pin-cleared" : "worker-pin-set",
+    targetType: "project",
+    targetId: projectId,
+    projectId,
+    info: { workerId },
+  });
+  res.json({ ok: true, projectId, workerId });
+}
+
 export default {
   listWorkers: expressify(listWorkers),
+  pinWorker: expressify(pinWorker),
 };

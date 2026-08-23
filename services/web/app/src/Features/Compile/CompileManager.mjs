@@ -6,6 +6,7 @@ import ProjectRootDocManager from "../Project/ProjectRootDocManager.mjs";
 import UserGetter from "../User/UserGetter.mjs";
 import ClsiManager from "./ClsiManager.mjs";
 import CompileJobManager from "./CompileJobManager.mjs";
+import WorkerRegistry from "./WorkerRegistry.mjs";
 import Metrics from "@overleaf/metrics";
 import { RateLimiter } from "../../infrastructure/RateLimiter.mjs";
 import { callbackify, callbackifyMultiResult } from "@overleaf/promise-utils";
@@ -126,7 +127,10 @@ async function compile(projectId, userId, options = {}) {
   options.jobId = jobId;
 
   try {
-    await CompileJobManager.markStarted(jobId);
+    const placement = await WorkerRegistry.promises.resolveBaseUrl(
+      String(projectId),
+    );
+    await CompileJobManager.markStarted(jobId, placement.workerId);
     const result = await CompileJobManager.dispatch(job, () =>
       ClsiManager.promises.sendRequest(
         project,

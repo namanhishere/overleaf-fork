@@ -8,6 +8,7 @@ import {
 } from '@overleaf/fetch-utils'
 import Settings from '@overleaf/settings'
 import ProjectGetter from '../Project/ProjectGetter.mjs'
+import WorkerRegistry from './WorkerRegistry.mjs'
 import ProjectEntityHandler from '../Project/ProjectEntityHandler.mjs'
 import logger from '@overleaf/logger'
 import OError from '@overleaf/o-error'
@@ -207,7 +208,7 @@ async function stopCompile(projectId, userId, options) {
     options = {}
   }
   const { compileBackendClass, compileGroup } = options
-  const url = _getCompilerUrl(
+  const url = await _getCompilerUrl(
     compileBackendClass,
     compileGroup,
     projectId,
@@ -240,7 +241,7 @@ async function deleteAuxFiles(projectId, userId, options, clsiserverid) {
     options = {}
   }
   const { compileBackendClass, compileGroup } = options
-  const url = _getCompilerUrl(
+  const url = await _getCompilerUrl(
     compileBackendClass,
     compileGroup,
     projectId,
@@ -617,14 +618,15 @@ async function _makeNewBackendRequest(
   }
 }
 
-function _getCompilerUrl(
+async function _getCompilerUrl(
   compileBackendClass,
   compileGroup,
   projectId,
   userId,
   action
 ) {
-  const u = new URL(Settings.apis.clsi.url)
+  const { baseUrl } = await WorkerRegistry.promises.resolveBaseUrl(projectId)
+  const u = new URL(baseUrl || Settings.apis.clsi.url)
   u.pathname = `/project/${projectId}`
   if (userId != null) {
     u.pathname += `/user/${userId}`
@@ -644,7 +646,7 @@ async function _postToClsi(
   compileBackendClass,
   compileGroup
 ) {
-  const url = _getCompilerUrl(
+  const url = await _getCompilerUrl(
     compileBackendClass,
     compileGroup,
     projectId,
@@ -1188,7 +1190,7 @@ async function wordCount(projectId, userId, file, limits, clsiserverid) {
   const { compileBackendClass, compileGroup } = limits
   const req = await _buildRequest(null, projectId, userId, limits)
   const filename = file || req.compile.rootResourcePath
-  const url = _getCompilerUrl(
+  const url = await _getCompilerUrl(
     compileBackendClass,
     compileGroup,
     projectId,
@@ -1226,7 +1228,7 @@ async function syncTeX(
   }
 ) {
   const { compileBackendClass, compileGroup } = limits
-  const url = _getCompilerUrl(
+  const url = await _getCompilerUrl(
     compileBackendClass,
     compileGroup,
     projectId,

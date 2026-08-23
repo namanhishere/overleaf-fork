@@ -31,6 +31,7 @@ import CompileManager from "./Features/Compile/CompileManager.mjs";
 import CompileController from "./Features/Compile/CompileController.mjs";
 import ProjectReleasesController from "./Features/Releases/ProjectReleasesController.mjs";
 import AdminCompilationProfilesController from "./Features/Admin/AdminCompilationProfilesController.mjs";
+import AdminWorkersController from "./Features/Admin/AdminWorkersController.mjs";
 import HealthCheckController from "./Features/HealthCheck/HealthCheckController.mjs";
 import ProjectDownloadsController from "./Features/Downloads/ProjectDownloadsController.mjs";
 import FileStoreController from "./Features/FileStore/FileStoreController.mjs";
@@ -1155,6 +1156,11 @@ async function initialize(webRouter, privateApiRouter, publicApiRouter) {
     AuthorizationMiddleware.ensureUserIsSiteAdmin,
     RateLimiterMiddleware.rateLimit(rateLimiters.adminAuditRead),
     AuditLogController.query,
+  );
+  webRouter.post(
+    "/admin/api/workers/pin",
+    AuthorizationMiddleware.ensureUserIsSiteAdmin,
+    AdminWorkersController.pinWorker,
   );
 
   webRouter.get("/chrome", function (req, res, next) {
