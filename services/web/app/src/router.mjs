@@ -30,6 +30,7 @@ import DocumentController from "./Features/Documents/DocumentController.mjs";
 import CompileManager from "./Features/Compile/CompileManager.mjs";
 import CompileController from "./Features/Compile/CompileController.mjs";
 import ProjectReleasesController from "./Features/Releases/ProjectReleasesController.mjs";
+import AdminCompilationProfilesController from "./Features/Admin/AdminCompilationProfilesController.mjs";
 import HealthCheckController from "./Features/HealthCheck/HealthCheckController.mjs";
 import ProjectDownloadsController from "./Features/Downloads/ProjectDownloadsController.mjs";
 import FileStoreController from "./Features/FileStore/FileStoreController.mjs";
@@ -1112,6 +1113,36 @@ async function initialize(webRouter, privateApiRouter, publicApiRouter) {
     "/admin/observability",
     AuthorizationMiddleware.ensureUserIsSiteAdmin,
     (req, res) => res.render("admin/observability"),
+  );
+  webRouter.get(
+    "/admin/profiles",
+    AuthorizationMiddleware.ensureUserIsSiteAdmin,
+    (req, res) => res.render("admin/profiles"),
+  );
+  webRouter.get(
+    "/admin/api/profiles",
+    AuthorizationMiddleware.ensureUserIsSiteAdmin,
+    AdminCompilationProfilesController.listProfiles,
+  );
+  webRouter.post(
+    "/admin/api/profiles",
+    AuthorizationMiddleware.ensureUserIsSiteAdmin,
+    AdminCompilationProfilesController.createProfile,
+  );
+  webRouter.patch(
+    "/admin/api/profiles/:slug",
+    AuthorizationMiddleware.ensureUserIsSiteAdmin,
+    AdminCompilationProfilesController.updateProfile,
+  );
+  webRouter.delete(
+    "/admin/api/profiles/:slug",
+    AuthorizationMiddleware.ensureUserIsSiteAdmin,
+    AdminCompilationProfilesController.deleteProfile,
+  );
+  webRouter.post(
+    "/admin/api/profiles/:slug/apply",
+    AuthorizationMiddleware.ensureUserIsSiteAdmin,
+    AdminCompilationProfilesController.applyToProject,
   );
   webRouter.get(
     "/admin/api/observability",
