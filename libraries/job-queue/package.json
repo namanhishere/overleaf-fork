@@ -1,0 +1,21 @@
+{
+  "name": "@overleaf/job-queue",
+  "version": "0.1.0",
+  "description": "Thin Redis Streams job queue with consumer groups, retries and a dead-letter queue.",
+  "main": "index.cjs",
+  "files": [
+    "index.cjs"
+  ],
+  "scripts": {
+    "lint": "eslint --cache --cache-location ../../.cache/eslint/ --ext .cjs,.js --max-warnings 0 --format unix .",
+    "lint:fix": "eslint --cache --cache-location ../../.cache/eslint/ --fix --ext .cjs,.js .",
+    "test": "yarn run lint && yarn run test:unit",
+    "test:unit": "mocha --exit test/**/*.test.cjs"
+  },
+  "license": "AGPL-3.0-only",
+  "devDependencies": {
+    "chai": "^4.3.6",
+    "mocha": "11.1.0",
+    "sinon": "~9.0.1"
+  }
+}

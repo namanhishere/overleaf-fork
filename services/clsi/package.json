@@ -21,6 +21,7 @@
     "@overleaf/metrics": "workspace:*",
     "@overleaf/o-error": "workspace:*",
     "@overleaf/promise-utils": "workspace:*",
+    "@overleaf/redis-wrapper": "workspace:*",
     "@overleaf/settings": "workspace:*",
     "@overleaf/stream-utils": "workspace:*",
     "@overleaf/validation-tools": "workspace:*",

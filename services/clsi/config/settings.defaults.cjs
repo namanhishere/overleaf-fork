@@ -64,7 +64,13 @@ module.exports = {
       zone: process.env.ZONE,
       isSpotInstance,
 
-      downloadHost: process.env.DOWNLOAD_HOST || 'http://localhost:8080',
+      // DOWNLOAD_HOST may be given as a bare hostname (as in the dev env);
+      // output file URLs must be absolute for web's `new URL()` parsing.
+      downloadHost: process.env.DOWNLOAD_HOST
+        ? process.env.DOWNLOAD_HOST.startsWith('http')
+          ? process.env.DOWNLOAD_HOST
+          : `http://${process.env.DOWNLOAD_HOST}`
+        : 'http://localhost:8080',
     },
     clsiPerf: {
       host: `${process.env.CLSI_PERF_HOST || '127.0.0.1'}:${
@@ -109,6 +115,19 @@ module.exports = {
   pdfCachingWorkerPoolBackLogLimit:
     parseInt(process.env.PDF_CACHING_WORKER_POOL_BACK_LOG_LIMIT, 10) || 40,
   compileConcurrencyLimit: isSpotInstance ? 32 : 64,
+  // Redis connection used for compile-job telemetry (clsi:job:{jobId} hashes).
+  redis: {
+    clsi: {
+      host: process.env.REDIS_HOST || process.env.OVERLEAF_REDIS_HOST || '127.0.0.1',
+      port: process.env.REDIS_PORT || process.env.OVERLEAF_REDIS_PORT || '6379',
+      password: process.env.REDIS_PASSWORD || process.env.OVERLEAF_REDIS_PASS || '',
+      db: process.env.CLSI_REDIS_DB,
+      maxRetriesPerRequest: parseInt(
+        process.env.REDIS_MAX_RETRIES_PER_REQUEST || '20'
+      ),
+    },
+  },
+  CLSI_SERVER_ID,
   performanceLogSamplingPercentage:
     parseFloat(process.env.CLSI_PERFORMANCE_LOG_SAMPLING, 10) || 0,
 }

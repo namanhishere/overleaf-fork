@@ -1,132 +1,133 @@
-import { promisify } from 'node:util'
-import settings from '@overleaf/settings'
-import OutputCacheManager from './OutputCacheManager.js'
+import { promisify } from "node:util";
+import settings from "@overleaf/settings";
+import OutputCacheManager from "./OutputCacheManager.js";
 
-const VALID_COMPILERS = ['pdflatex', 'latex', 'xelatex', 'lualatex']
-const MAX_TIMEOUT = 600
-const EDITOR_ID_REGEX = /^[a-f0-9-]{36}$/ // UUID
-const HISTORY_ID_REGEX = /^([0-9a-f]{24}|[1-9][0-9]{0,9})$/ // mongo id or postgres id
+const VALID_COMPILERS = ["pdflatex", "latex", "xelatex", "lualatex"];
+const MAX_TIMEOUT = 600;
+const EDITOR_ID_REGEX = /^[a-f0-9-]{36}$/; // UUID
+const HISTORY_ID_REGEX = /^([0-9a-f]{24}|[1-9][0-9]{0,9})$/; // mongo id or postgres id
 
 function parse(body, callback) {
-  const response = {}
+  const response = {};
 
   if (body.compile == null) {
     return callback(
-      new Error('top level object should have a compile attribute')
-    )
+      new Error("top level object should have a compile attribute"),
+    );
   }
 
-  const { compile } = body
+  const { compile } = body;
   if (!compile.options) {
-    compile.options = {}
+    compile.options = {};
   }
 
   try {
     response.metricsOpts = {
-      path: _parseAttribute('metricsPath', compile.options.metricsPath, {
-        default: '',
-        type: 'string',
+      path: _parseAttribute("metricsPath", compile.options.metricsPath, {
+        default: "",
+        type: "string",
       }),
-      method: _parseAttribute('metricsMethod', compile.options.metricsMethod, {
-        default: '',
-        type: 'string',
+      method: _parseAttribute("metricsMethod", compile.options.metricsMethod, {
+        default: "",
+        type: "string",
       }),
       // Will be populated later. Must always be populated for prom library.
-      compile: 'initial',
-    }
-    response.compiler = _parseAttribute('compiler', compile.options.compiler, {
+      compile: "initial",
+    };
+    response.compiler = _parseAttribute("compiler", compile.options.compiler, {
       validValues: VALID_COMPILERS,
-      default: 'pdflatex',
-      type: 'string',
-    })
+      default: "pdflatex",
+      type: "string",
+    });
     response.compileFromClsiCache = _parseAttribute(
-      'compileFromClsiCache',
+      "compileFromClsiCache",
       compile.options.compileFromClsiCache,
-      { default: false, type: 'boolean' }
-    )
+      { default: false, type: "boolean" },
+    );
     response.populateClsiCache = _parseAttribute(
-      'populateClsiCache',
+      "populateClsiCache",
       compile.options.populateClsiCache,
-      { default: false, type: 'boolean' }
-    )
+      { default: false, type: "boolean" },
+    );
     response.enablePdfCaching = _parseAttribute(
-      'enablePdfCaching',
+      "enablePdfCaching",
       compile.options.enablePdfCaching,
       {
         default: false,
-        type: 'boolean',
-      }
-    )
+        type: "boolean",
+      },
+    );
     response.pdfCachingMinChunkSize = _parseAttribute(
-      'pdfCachingMinChunkSize',
+      "pdfCachingMinChunkSize",
       compile.options.pdfCachingMinChunkSize,
       {
         default: settings.pdfCachingMinChunkSize,
-        type: 'number',
-      }
-    )
+        type: "number",
+      },
+    );
     response.enableCheckpoint = _parseAttribute(
-      'enableCheckpoint',
+      "enableCheckpoint",
       compile.options.enableCheckpoint,
-      { default: false, type: 'boolean' }
-    )
-    response.timeout = _parseAttribute('timeout', compile.options.timeout, {
+      { default: false, type: "boolean" },
+    );
+    response.timeout = _parseAttribute("timeout", compile.options.timeout, {
       default: MAX_TIMEOUT,
-      type: 'number',
-    })
+      type: "number",
+    });
     response.imageName = _parseAttribute(
-      'imageName',
+      "imageName",
       compile.options.imageName,
       {
-        type: 'string',
+        type: "string",
         validValues:
           settings.clsi &&
           settings.clsi.docker &&
           settings.clsi.docker.allowedImages,
-      }
-    )
-    response.draft = _parseAttribute('draft', compile.options.draft, {
+      },
+    );
+    response.draft = _parseAttribute("draft", compile.options.draft, {
       default: false,
-      type: 'boolean',
-    })
+      type: "boolean",
+    });
     response.stopOnFirstError = _parseAttribute(
-      'stopOnFirstError',
+      "stopOnFirstError",
       compile.options.stopOnFirstError,
       {
         default: false,
-        type: 'boolean',
-      }
-    )
-    response.check = _parseAttribute('check', compile.options.check, {
-      type: 'string',
-    })
-    response.flags = _parseAttribute('flags', compile.options.flags, {
+        type: "boolean",
+      },
+    );
+    response.jobId = _parseAttribute("jobId", compile.options.jobId, {
+      type: "string",
+      regex: /^[0-9a-fA-F-]{8,64}$/,
+    });
+    response.flags = _parseAttribute("flags", compile.options.flags, {
       default: [],
-      type: 'object',
-    })
+      type: "object",
+    });
     if (settings.allowedCompileGroups) {
       response.compileGroup = _parseAttribute(
-        'compileGroup',
+        "compileGroup",
         compile.options.compileGroup,
         {
           validValues: settings.allowedCompileGroups,
-          default: '',
-          type: 'string',
-        }
-      )
+          default: "",
+          type: "string",
+        },
+      );
     }
     // The syncType specifies whether the request contains all
     // resources (full) or only those resources to be updated
     // in-place (incremental).
-    response.syncType = _parseAttribute('syncType', compile.options.syncType, {
+    response.syncType = _parseAttribute("syncType", compile.options.syncType, {
       validValues: [
-        'full',
-        'incremental',
-        'history-full',
-        'history-incremental',
+        "full",
+        "incremental",
+        "history-full",
+        "history-incremental",
       ],
-      type: 'string',
-    })
+      type: "string",
+    });
 
     // The syncState is an identifier passed in with the request
     // which has the property that it changes when any resource is
@@ -138,103 +139,103 @@ function parse(body, callback) {
     // on syncType incremental the syncState identifier must match
     // the stored value
     response.syncState = _parseAttribute(
-      'syncState',
+      "syncState",
       compile.options.syncState,
-      { type: 'string' }
-    )
+      { type: "string" },
+    );
 
     if (response.timeout > MAX_TIMEOUT) {
-      response.timeout = MAX_TIMEOUT
+      response.timeout = MAX_TIMEOUT;
     }
-    response.timeout = response.timeout * 1000 // milliseconds
+    response.timeout = response.timeout * 1000; // milliseconds
 
-    response.resources = (compile.resources || []).map(resource =>
-      _parseResource(resource)
-    )
+    response.resources = (compile.resources || []).map((resource) =>
+      _parseResource(resource),
+    );
     response.historyId = _parseAttribute(
-      'historyId',
+      "historyId",
       compile.options.historyId,
-      { type: 'string', regex: HISTORY_ID_REGEX }
-    )
+      { type: "string", regex: HISTORY_ID_REGEX },
+    );
     response.baseHistoryVersion = _parseAttribute(
-      'baseHistoryVersion',
+      "baseHistoryVersion",
       compile.baseHistoryVersion,
-      { type: 'number' }
-    )
-    response.globalBlobs = _parseAttribute('globalBlobs', compile.globalBlobs, {
-      type: 'array',
-    })
+      { type: "number" },
+    );
+    response.globalBlobs = _parseAttribute("globalBlobs", compile.globalBlobs, {
+      type: "array",
+    });
     // The snapshot and changes are validated when loading them in editor-core.
-    response.rawSnapshot = compile.rawSnapshot
-    response.rawChangeOperations = compile.rawChangeOperations
-    response.isCompileFromHistory = !!response.rawChangeOperations
+    response.rawSnapshot = compile.rawSnapshot;
+    response.rawChangeOperations = compile.rawChangeOperations;
+    response.isCompileFromHistory = !!response.rawChangeOperations;
 
     // v1 conversions / submissions
     if (compile.filestoreBlobPrefix) {
-      response.filestoreBlobPrefix = _checkPath(compile.filestoreBlobPrefix)
+      response.filestoreBlobPrefix = _checkPath(compile.filestoreBlobPrefix);
     }
 
     // clsi-perf
     response.clsiPerfVariant = _parseAttribute(
-      'clsiPerfVariant',
+      "clsiPerfVariant",
       compile.options.clsiPerfVariant,
-      { type: 'string' }
-    )
+      { type: "string" },
+    );
 
     const rootResourcePath = _parseAttribute(
-      'rootResourcePath',
+      "rootResourcePath",
       compile.rootResourcePath,
       {
-        default: 'main.tex',
-        type: 'string',
-      }
-    )
-    response.rootResourcePath = _checkPath(rootResourcePath)
+        default: "main.tex",
+        type: "string",
+      },
+    );
+    response.rootResourcePath = _checkPath(rootResourcePath);
 
-    response.editorId = _parseAttribute('editorId', compile.options.editorId, {
-      type: 'string',
+    response.editorId = _parseAttribute("editorId", compile.options.editorId, {
+      type: "string",
       regex: EDITOR_ID_REGEX,
-    })
-    response.buildId = _parseAttribute('buildId', compile.options.buildId, {
-      type: 'string',
+    });
+    response.buildId = _parseAttribute("buildId", compile.options.buildId, {
+      type: "string",
       regex: OutputCacheManager.BUILD_REGEX,
-    })
+    });
   } catch (error1) {
-    const error = error1
-    return callback(error)
+    const error = error1;
+    return callback(error);
   }
 
-  callback(null, response)
+  callback(null, response);
 }
 
 function _parseResource(resource) {
-  let modified
-  if (resource.path == null || typeof resource.path !== 'string') {
-    throw new Error('all resources should have a path attribute')
+  let modified;
+  if (resource.path == null || typeof resource.path !== "string") {
+    throw new Error("all resources should have a path attribute");
   }
 
   if (resource.modified != null) {
-    modified = new Date(resource.modified)
+    modified = new Date(resource.modified);
     if (isNaN(modified.getTime())) {
       throw new Error(
-        `resource modified date could not be understood: ${resource.modified}`
-      )
+        `resource modified date could not be understood: ${resource.modified}`,
+      );
     }
   }
 
   if (resource.url == null && resource.content == null) {
     throw new Error(
-      'all resources should have either a url or content attribute'
-    )
+      "all resources should have either a url or content attribute",
+    );
   }
-  if (resource.content != null && typeof resource.content !== 'string') {
-    throw new Error('content attribute should be a string')
+  if (resource.content != null && typeof resource.content !== "string") {
+    throw new Error("content attribute should be a string");
   }
-  if (resource.url != null && typeof resource.url !== 'string') {
-    throw new Error('url attribute should be a string')
+  if (resource.url != null && typeof resource.url !== "string") {
+    throw new Error("url attribute should be a string");
   }
-  if (resource.fallbackURL && typeof resource.fallbackURL !== 'string') {
-    throw new Error('fallbackURL attribute should be a string')
+  if (resource.fallbackURL && typeof resource.fallbackURL !== "string") {
+    throw new Error("fallbackURL attribute should be a string");
   }
 
   return {
@@ -243,7 +244,7 @@ function _parseResource(resource) {
     url: resource.url,
     fallbackURL: resource.fallbackURL,
     content: resource.content,
-  }
+  };
 }
 
 function _parseAttribute(name, attribute, options) {
@@ -252,44 +253,44 @@ function _parseAttribute(name, attribute, options) {
       if (options.validValues.indexOf(attribute) === -1) {
         throw new Error(
           `${name} attribute should be one of: ${options.validValues.join(
-            ', '
-          )}`
-        )
+            ", ",
+          )}`,
+        );
       }
     }
-    if (options.type === 'array') {
+    if (options.type === "array") {
       if (!Array.isArray(attribute)) {
-        throw new Error(`${name} attribute should be an array`)
+        throw new Error(`${name} attribute should be an array`);
       }
     } else if (options.type != null) {
       // eslint-disable-next-line valid-typeof
       if (typeof attribute !== options.type) {
-        throw new Error(`${name} attribute should be a ${options.type}`)
+        throw new Error(`${name} attribute should be a ${options.type}`);
       }
     }
-    if (options.type === 'string' && options.regex instanceof RegExp) {
+    if (options.type === "string" && options.regex instanceof RegExp) {
       if (!options.regex.test(attribute)) {
         throw new Error(
-          `${name} attribute does not match regex ${options.regex}`
-        )
+          `${name} attribute does not match regex ${options.regex}`,
+        );
       }
     }
   } else {
     if (options.default != null) {
-      return options.default
+      return options.default;
     }
   }
-  return attribute
+  return attribute;
 }
 
 function _checkPath(path) {
   // check that the request does not use a relative path
-  for (const dir of Array.from(path.split('/'))) {
-    if (dir === '..') {
-      throw new Error('relative path in root resource')
+  for (const dir of Array.from(path.split("/"))) {
+    if (dir === "..") {
+      throw new Error("relative path in root resource");
     }
   }
-  return path
+  return path;
 }
 
-export default { parse, MAX_TIMEOUT, promises: { parse: promisify(parse) } }
+export default { parse, MAX_TIMEOUT, promises: { parse: promisify(parse) } };

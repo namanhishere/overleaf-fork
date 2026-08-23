@@ -30,6 +30,7 @@ COPY libraries/metrics/package.json /overleaf/libraries/metrics/package.json
 COPY libraries/o-error/package.json /overleaf/libraries/o-error/package.json
 COPY libraries/overleaf-editor-core/package.json /overleaf/libraries/overleaf-editor-core/package.json
 COPY libraries/promise-utils/package.json /overleaf/libraries/promise-utils/package.json
+COPY libraries/redis-wrapper/package.json /overleaf/libraries/redis-wrapper/package.json
 COPY libraries/settings/package.json /overleaf/libraries/settings/package.json
 COPY libraries/stream-utils/package.json /overleaf/libraries/stream-utils/package.json
 COPY libraries/validation-tools/package.json /overleaf/libraries/validation-tools/package.json
@@ -44,17 +45,19 @@ COPY libraries/metrics/ /overleaf/libraries/metrics/
 COPY libraries/o-error/ /overleaf/libraries/o-error/
 COPY libraries/overleaf-editor-core/ /overleaf/libraries/overleaf-editor-core/
 COPY libraries/promise-utils/ /overleaf/libraries/promise-utils/
+COPY libraries/redis-wrapper/ /overleaf/libraries/redis-wrapper/
 COPY libraries/settings/ /overleaf/libraries/settings/
 COPY libraries/stream-utils/ /overleaf/libraries/stream-utils/
 COPY libraries/validation-tools/ /overleaf/libraries/validation-tools/
-COPY services/clsi/ /overleaf/services/clsi/
-
 FROM app AS with-texlive
+ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update \
-    && apt-cache depends texlive-full | grep "Depends: " | grep -v -- "-doc" | grep -v -- "-lang-" | sed 's/Depends: //' | xargs apt-get install -y --no-install-recommends \
-    && apt-get install -y --no-install-recommends fontconfig inkscape python3-pygments qpdf \
+    && apt-cache depends texlive-full | grep "Depends: " | grep -v -- "-doc" | grep -v -- "-lang-" | sed 's/Depends: //' | xargs apt-get install -y -o Dpkg::Options::="--force-confold" --no-install-recommends \
+    && apt-get install -y -o Dpkg::Options::="--force-confold" --no-install-recommends fontconfig inkscape python3-pygments qpdf \
     && rm -rf /var/lib/apt/lists/*
+
+COPY services/clsi/ /overleaf/services/clsi/
 
 RUN mkdir -p cache compiles output \
 &&  chown node:node cache compiles output
