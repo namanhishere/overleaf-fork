@@ -35,6 +35,15 @@ addConnectionDrainer("mongodb", async () => {
 });
 
 const internalDb = mongoClient.db();
+/**
+ * Raw replica-set health from the driver (replSetGetStatus). Returns the
+ * command result or throws when the server is standalone / unreachable.
+ */
+export async function replicaSetStatus() {
+  await connectionPromise;
+  return internalDb.admin().command({ replSetGetStatus: 1 });
+}
+
 export const db = {
   auditEntries: internalDb.collection("auditEntries"),
   compileJobs: internalDb.collection("compileJobs"),
@@ -124,8 +133,8 @@ export default {
   ObjectId,
   connectionPromise,
   waitForDb,
+  replicaSetStatus,
   getCollectionNames,
-  getCollectionInternal,
   cleanupTestDatabase,
   dropTestDatabase,
   READ_PREFERENCE_PRIMARY,

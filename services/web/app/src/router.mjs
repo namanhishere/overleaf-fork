@@ -32,6 +32,7 @@ import CompileController from "./Features/Compile/CompileController.mjs";
 import ProjectReleasesController from "./Features/Releases/ProjectReleasesController.mjs";
 import AdminCompilationProfilesController from "./Features/Admin/AdminCompilationProfilesController.mjs";
 import AdminWorkersController from "./Features/Admin/AdminWorkersController.mjs";
+import AdminStorageHealthController from "./Features/Admin/AdminStorageHealthController.mjs";
 import HealthCheckController from "./Features/HealthCheck/HealthCheckController.mjs";
 import ProjectDownloadsController from "./Features/Downloads/ProjectDownloadsController.mjs";
 import FileStoreController from "./Features/FileStore/FileStoreController.mjs";
@@ -1114,6 +1115,17 @@ async function initialize(webRouter, privateApiRouter, publicApiRouter) {
     "/admin/observability",
     AuthorizationMiddleware.ensureUserIsSiteAdmin,
     (req, res) => res.render("admin/observability"),
+  );
+  webRouter.get(
+    "/admin/storage",
+    AuthorizationMiddleware.ensureUserIsSiteAdmin,
+    (req, res) => res.render("admin/storage"),
+  );
+  webRouter.get(
+    "/admin/api/storage",
+    AuthorizationMiddleware.ensureUserIsSiteAdmin,
+    RateLimiterMiddleware.rateLimit(rateLimiters.adminAuditRead),
+    AdminStorageHealthController.getStorageHealth,
   );
   webRouter.get(
     "/admin/profiles",
