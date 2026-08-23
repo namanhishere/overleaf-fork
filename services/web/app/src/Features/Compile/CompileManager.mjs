@@ -118,8 +118,8 @@ async function compile(projectId, userId, options = {}) {
     jobId,
     projectId,
     userId,
-    imageName: options.imageName,
-    compiler: options.compiler,
+    imageName: options.imageName ?? project.imageName ?? null,
+    compiler: options.compiler ?? project.compiler ?? null,
     timeoutMs: limits.timeout ? limits.timeout * 1000 : null,
     buildId: options.buildId,
   });

@@ -29,6 +29,7 @@ import TutorialController from "./Features/Tutorial/TutorialController.mjs";
 import DocumentController from "./Features/Documents/DocumentController.mjs";
 import CompileManager from "./Features/Compile/CompileManager.mjs";
 import CompileController from "./Features/Compile/CompileController.mjs";
+import ProjectReleasesController from "./Features/Releases/ProjectReleasesController.mjs";
 import HealthCheckController from "./Features/HealthCheck/HealthCheckController.mjs";
 import ProjectDownloadsController from "./Features/Downloads/ProjectDownloadsController.mjs";
 import FileStoreController from "./Features/FileStore/FileStoreController.mjs";
@@ -622,6 +623,21 @@ async function initialize(webRouter, privateApiRouter, publicApiRouter) {
       params: ["Project_id"],
     }),
     CompileController.listJobs,
+  );
+  webRouter.get(
+    "/project/:Project_id/releases",
+    AuthorizationMiddleware.ensureUserCanReadProject,
+    (req, res) => res.render("project/releases"),
+  );
+  webRouter.get(
+    "/project/:Project_id/api/releases",
+    AuthorizationMiddleware.ensureUserCanReadProject,
+    ProjectReleasesController.listReleases,
+  );
+  webRouter.post(
+    "/project/:Project_id/api/releases",
+    AuthorizationMiddleware.ensureUserCanAdminProject,
+    ProjectReleasesController.createRelease,
   );
 
   webRouter.get(
