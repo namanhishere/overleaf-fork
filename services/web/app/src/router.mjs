@@ -1,5 +1,6 @@
 import AdminController from "./Features/ServerAdmin/AdminController.mjs";
 import AuditLogController from "./Features/Audit/AuditLogController.mjs";
+import AdminObservabilityController from "./Features/Admin/AdminObservabilityController.mjs";
 import AdminUsersRouter from "./Features/ServerAdmin/AdminUsersRouter.mjs";
 import ErrorController from "./Features/Errors/ErrorController.mjs";
 import Features from "./infrastructure/Features.mjs";
@@ -1090,6 +1091,17 @@ async function initialize(webRouter, privateApiRouter, publicApiRouter) {
     "/admin/audit",
     AuthorizationMiddleware.ensureUserIsSiteAdmin,
     (req, res) => res.render("admin/audit"),
+  );
+  webRouter.get(
+    "/admin/observability",
+    AuthorizationMiddleware.ensureUserIsSiteAdmin,
+    (req, res) => res.render("admin/observability"),
+  );
+  webRouter.get(
+    "/admin/api/observability",
+    AuthorizationMiddleware.ensureUserIsSiteAdmin,
+    RateLimiterMiddleware.rateLimit(rateLimiters.adminAuditRead),
+    AdminObservabilityController.getObservability,
   );
   webRouter.get(
     "/admin/api/audit",
