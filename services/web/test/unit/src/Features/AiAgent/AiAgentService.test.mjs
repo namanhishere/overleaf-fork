@@ -114,6 +114,18 @@ describe("AiAgentService", function () {
       CompileManager: ctx.CompileManager,
     }));
     vi.doMock("@overleaf/fetch-utils", () => ({ fetchString: ctx.fetchString }));
+    ctx.ReviewService = {
+      promises: {
+        getReviewStatus: sinon.stub().resolves({
+          total: 2,
+          unresolved: 1,
+          threads: [{ resolved: false, firstMessage: "fix intro" }],
+        }),
+      },
+    };
+    vi.doMock("../../../../../app/src/Features/Review/ReviewService.mjs", () => ({
+      default: ctx.ReviewService,
+    }));
 
     ctx.service = (await import(modulePath)).default;
   });
@@ -227,6 +239,37 @@ describe("AiAgentService", function () {
       expect(result.path).to.equal("agents.md");
       expect(result.lines.join("\n")).to.contain("main.tex");
       expect(result.lines.join("\n")).to.contain("notes.md");
+    });
+  });
+
+  describe("runAgent slash commands", function () {
+    it("handles /summarize-comments without calling the LLM", async function (ctx) {
+      ctx.AiSettings.findOne.returns({
+        lean: () => ({
+          exec: async () => ({
+            enabled: true,
+            baseUrl: "http://ai.test",
+            apiKey: "k",
+            model: "m",
+          }),
+        }),
+      });
+      ctx.fetchString.resolves(
+        JSON.stringify({
+          choices: [{ message: { content: "1 comment concerns the intro." } }],
+        }),
+      );
+      const result = await ctx.service.promises.runAgent(
+        "p1",
+        "u1",
+        "/summarize-comments",
+      );
+      expect(result.proposals).to.deep.equal([]);
+      expect(result.iterations).to.equal(0);
+      expect(
+        result.transcript[result.transcript.length - 1].content,
+      ).to.equal("1 comment concerns the intro.");
+      expect(ctx.ReviewService.promises.getReviewStatus.calledOnce).to.be.true;
     });
   });
 });

@@ -83,6 +83,22 @@ function ProjectAi({ projectId }: { projectId: string }) {
     }
   }
 
+  async function runSummarize() {
+    setError(null);
+    setMessage(null);
+    try {
+      const res = await postJSON(`/project/${projectId}/api/ai/run`, {
+        body: { task: "/summarize-comments" },
+      });
+      const reply =
+        res.transcript?.[res.transcript.length - 1]?.content ||
+        "No summary returned";
+      setMessage(reply);
+    } catch (err) {
+      setError(String((err as Error).message));
+    }
+  }
+
   return (
     <div className="container">
       <h1>AI assistant</h1>
@@ -90,6 +106,9 @@ function ProjectAi({ projectId }: { projectId: string }) {
         <a href={`/project/${projectId}`}>Back to project</a> ·{" "}
         <button className="btn btn-default btn-sm" onClick={runInit}>
           /init — generate agents.md
+        </button>{" "}
+        <button className="btn btn-default btn-sm" onClick={runSummarize}>
+          /summarize-comments
         </button>
       </p>
       <p>

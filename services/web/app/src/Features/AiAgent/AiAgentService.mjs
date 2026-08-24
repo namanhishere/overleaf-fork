@@ -293,6 +293,19 @@ async function runAgent(projectId, userId, task) {
   }
   const maxIterations = settings.maxIterations || 3;
 
+  // Slash commands (PLANS 9): deterministic, no agent loop.
+  const trimmed = String(task).trim();
+  if (trimmed === "/summarize-comments") {
+    const { summary, unresolved } = await summarizeComments(projectId);
+    return {
+      transcript: [{ role: "assistant", content: summary }],
+      proposals: [],
+      compile: null,
+      iterations: 0,
+      unresolvedComments: unresolved,
+    };
+  }
+
   const context = await getProjectContext(projectId);
   const systemPrompt = [
     "You are an academic writing and LaTeX assistant working inside an Overleaf-style project.",
