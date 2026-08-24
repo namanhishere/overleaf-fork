@@ -44,7 +44,16 @@ export async function replicaSetStatus() {
   return internalDb.admin().command({ replSetGetStatus: 1 });
 }
 
+/**
+ * Handle to an arbitrary database on the same cluster (used by backup
+ * restore to target a scratch database).
+ */
+export function getDb(name) {
+  return mongoClient.db(name);
+}
+
 export const db = {
+  backupRuns: internalDb.collection("backupRuns"),
   auditEntries: internalDb.collection("auditEntries"),
   compileJobs: internalDb.collection("compileJobs"),
   deletedProjects: internalDb.collection("deletedProjects"),

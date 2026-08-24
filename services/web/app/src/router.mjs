@@ -33,6 +33,7 @@ import ProjectReleasesController from "./Features/Releases/ProjectReleasesContro
 import AdminCompilationProfilesController from "./Features/Admin/AdminCompilationProfilesController.mjs";
 import AdminWorkersController from "./Features/Admin/AdminWorkersController.mjs";
 import AdminStorageHealthController from "./Features/Admin/AdminStorageHealthController.mjs";
+import AdminBackupController from "./Features/Admin/AdminBackupController.mjs";
 import SsoController from "./Features/Authentication/SsoController.mjs";
 import HealthCheckController from "./Features/HealthCheck/HealthCheckController.mjs";
 import ProjectDownloadsController from "./Features/Downloads/ProjectDownloadsController.mjs";
@@ -1157,6 +1158,34 @@ async function initialize(webRouter, privateApiRouter, publicApiRouter) {
     AuthorizationMiddleware.ensureUserIsSiteAdmin,
     RateLimiterMiddleware.rateLimit(rateLimiters.adminAuditRead),
     AdminStorageHealthController.getStorageHealth,
+  );
+  webRouter.get(
+    "/admin/backups",
+    AuthorizationMiddleware.ensureUserIsSiteAdmin,
+    (req, res) => res.render("admin/backups"),
+  );
+  webRouter.get(
+    "/admin/api/backups",
+    AuthorizationMiddleware.ensureUserIsSiteAdmin,
+    RateLimiterMiddleware.rateLimit(rateLimiters.adminAuditRead),
+    AdminBackupController.listBackups,
+  );
+  webRouter.post(
+    "/admin/api/backups",
+    AuthorizationMiddleware.ensureUserIsSiteAdmin,
+    RateLimiterMiddleware.rateLimit(rateLimiters.adminAuditRead),
+    AdminBackupController.runBackup,
+  );
+  webRouter.post(
+    "/admin/api/backups/:runId/restore-test",
+    AuthorizationMiddleware.ensureUserIsSiteAdmin,
+    RateLimiterMiddleware.rateLimit(rateLimiters.adminAuditRead),
+    AdminBackupController.restoreTest,
+  );
+  webRouter.get(
+    "/admin/api/backups/:runId/file/:collection",
+    AuthorizationMiddleware.ensureUserIsSiteAdmin,
+    AdminBackupController.downloadCollection,
   );
   webRouter.get(
     "/admin/profiles",
