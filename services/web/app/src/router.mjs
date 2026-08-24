@@ -34,6 +34,7 @@ import AdminCompilationProfilesController from "./Features/Admin/AdminCompilatio
 import AdminWorkersController from "./Features/Admin/AdminWorkersController.mjs";
 import AdminStorageHealthController from "./Features/Admin/AdminStorageHealthController.mjs";
 import AdminBackupController from "./Features/Admin/AdminBackupController.mjs";
+import MarkdownController from "./Features/Markdown/MarkdownController.mjs";
 import SsoController from "./Features/Authentication/SsoController.mjs";
 import HealthCheckController from "./Features/HealthCheck/HealthCheckController.mjs";
 import ProjectDownloadsController from "./Features/Downloads/ProjectDownloadsController.mjs";
@@ -1186,6 +1187,21 @@ async function initialize(webRouter, privateApiRouter, publicApiRouter) {
     "/admin/api/backups/:runId/file/:collection",
     AuthorizationMiddleware.ensureUserIsSiteAdmin,
     AdminBackupController.downloadCollection,
+  );
+  webRouter.get(
+    "/project/:Project_id/doc/:doc_id/preview",
+    AuthorizationMiddleware.ensureUserCanReadProject,
+    MarkdownController.previewPage,
+  );
+  webRouter.get(
+    "/project/:Project_id/api/markdown/:doc_id",
+    AuthorizationMiddleware.ensureUserCanReadProject,
+    MarkdownController.getDoc,
+  );
+  webRouter.post(
+    "/project/:Project_id/api/markdown/:doc_id/convert-to-latex",
+    AuthorizationMiddleware.ensureUserCanWriteProjectContent,
+    MarkdownController.convertToLatex,
   );
   webRouter.get(
     "/admin/profiles",

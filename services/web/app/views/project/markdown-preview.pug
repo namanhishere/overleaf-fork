@@ -1,0 +1,14 @@
+extends ../layout-react
+
+block vars
+	- projectId = projectId
+	- docId = docId
+
+block entrypointVar
+	- entrypoint = 'pages/project/markdown-preview'
+
+block content
+	main#markdown-preview-root.content.content-alt(
+		data-project-id=projectId
+		data-doc-id=docId
+	)
