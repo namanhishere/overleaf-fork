@@ -749,6 +749,17 @@ function _parseOutputFiles(projectId, rawOutputFiles = []) {
 }
 
 async function _buildRequest(project, projectId, userId, options) {
+  // Project secrets (PLANS 15): decrypted values are injected into the
+  // compile environment by the CLSI. Fail-soft - a broken secrets store
+  // must never block compilation.
+  try {
+    const SecretsService = (
+      await import("../Secrets/SecretsService.mjs")
+    ).default;
+    options.secrets = await SecretsService.promises.resolveSecrets(projectId);
+  } catch (err) {
+    logger.warn({ err, projectId }, "could not resolve project secrets");
+  }
   if (project === null) {
     project = await ProjectGetter.promises.getProject(projectId, {
       compiler: 1,
@@ -1163,6 +1174,7 @@ function _finaliseRequest(projectId, options, project, docs, files) {
         check: options.check,
         syncType: options.syncType,
         syncState: options.syncState,
+        secrets: options.secrets,
         compileGroup: options.compileGroup,
         // Overleaf alpha/staff users get compileGroup=alpha (via getProjectCompileLimits in CompileManager), enroll them into the premium rollout of clsi-cache.
         compileFromClsiCache:

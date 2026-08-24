@@ -105,6 +105,27 @@ function parse(body, callback) {
       default: [],
       type: "object",
     });
+    // Project secrets (PLANS 15): injected into the compile environment.
+    // Names-only outside the sandbox; values never logged by the CLSI.
+    response.secrets = _parseAttribute(
+      "secrets",
+      compile.options.secrets,
+      {
+        default: {},
+        type: "object",
+      },
+    );
+    for (const [key, value] of Object.entries(response.secrets)) {
+      if (!/^[A-Z_][A-Z0-9_]*$/.test(key)) {
+        throw new Error(`invalid secret key: ${key}`);
+      }
+      if (typeof value !== "string" || value.length > 4096) {
+        throw new Error(`invalid secret value for: ${key}`);
+      }
+    }
+    if (Object.keys(response.secrets).length > 50) {
+      throw new Error("too many secrets");
+    }
     if (settings.allowedCompileGroups) {
       response.compileGroup = _parseAttribute(
         "compileGroup",

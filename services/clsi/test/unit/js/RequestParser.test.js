@@ -501,3 +501,86 @@ describe('RequestParser', () => {
     })
   })
 })
+
+describe('RequestParser secrets (PLANS 15)', () => {
+  beforeEach(async ctx => {
+    tk.freeze()
+    ctx.callback = sinon.stub()
+    ctx.validResource = {
+      path: 'main.tex',
+      date: '12:00 01/02/03',
+      content: 'Hello world',
+    }
+    vi.doMock('@overleaf/settings', () => ({ default: {} }))
+    vi.doMock('../../../app/js/OutputCacheManager', () => ({
+      default: { BUILD_REGEX: /^[0-9a-f]+-[0-9a-f]+$/ },
+    }))
+    ctx.RequestParser = (await import(modulePath)).default
+  })
+
+  afterEach(() => {
+    tk.reset()
+  })
+
+  function buildRequest(secrets) {
+    return {
+      compile: {
+        token: 'token-123',
+        options: { secrets },
+        resources: [
+          { path: 'main.tex', date: '12:00 01/02/03', content: 'Hello world' },
+        ],
+      },
+    }
+  }
+
+  it('accepts valid secrets', async ctx => {
+    const body = await new Promise((resolve, reject) => {
+      ctx.RequestParser.parse(buildRequest({ ZENODO_TOKEN: 'abc123' }), (err, res) =>
+        err ? reject(err) : resolve(res),
+      )
+    })
+    expect(body.secrets).to.deep.equal({ ZENODO_TOKEN: 'abc123' })
+  })
+
+  it('rejects invalid secret keys', async ctx => {
+    let err = null
+    try {
+      await new Promise((resolve, reject) => {
+        ctx.RequestParser.parse(buildRequest({ 'bad-key': 'x' }), (e, res) =>
+          e ? reject(e) : resolve(res),
+        )
+      })
+    } catch (e) {
+      err = e
+    }
+    expect(err).to.exist
+    expect(err.message).to.contain('invalid secret key')
+  })
+
+  it('rejects oversized values', async ctx => {
+    let err = null
+    try {
+      await new Promise((resolve, reject) => {
+        ctx.RequestParser.parse(
+          buildRequest({ BIG: 'x'.repeat(5000) }),
+          (e, res) => (e ? reject(e) : resolve(res)),
+        )
+      })
+    } catch (e) {
+      err = e
+    }
+    expect(err).to.exist
+    expect(err.message).to.contain('invalid secret value')
+  })
+
+  it('defaults to empty secrets', async ctx => {
+    const body = await new Promise((resolve, reject) => {
+      ctx.RequestParser.parse(
+        { compile: { token: 't', options: {}, resources: [] } },
+        (e, res) => (e ? reject(e) : resolve(res)),
+      )
+    })
+    expect(body.secrets).to.deep.equal({})
+  })
+})

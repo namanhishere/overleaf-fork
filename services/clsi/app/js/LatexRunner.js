@@ -38,13 +38,24 @@ function runLatex(projectId, options, callback) {
   const compiler = options.compiler || "pdflatex";
   const timeout = options.timeout || 60000; // milliseconds
 
+  // Redact project secret values (PLANS 15): only the key names may
+  // appear in logs, never the values.
+  const safeEnvironment = environment
+    ? Object.fromEntries(
+        Object.entries(environment).map(([k, v]) => [
+          k,
+          typeof v === "string" && v.length > 0 ? "<redacted>" : v,
+        ]),
+      )
+    : environment;
+
   logger.debug(
     {
       directory,
       compiler,
       timeout,
       mainFile,
-      environment,
+      environment: safeEnvironment,
       flags,
       compileGroup,
       stopOnFirstError,

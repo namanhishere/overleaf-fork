@@ -205,6 +205,14 @@ async function doCompile(request, stats, timings) {
     env.ENABLE_CHECKPOINT = "1";
   }
 
+  // Project secrets (PLANS 15): exposed as environment variables inside
+  // the sandboxed compile only. Never logged by the CLSI.
+  if (request.secrets && typeof request.secrets === "object") {
+    for (const [key, value] of Object.entries(request.secrets)) {
+      env[key] = String(value);
+    }
+  }
+
   const compileStart = Date.now();
 
   const compileName = getCompileName(request.project_id, request.user_id);
