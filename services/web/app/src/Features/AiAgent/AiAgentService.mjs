@@ -444,7 +444,53 @@ async function generateInitDoc(projectId, userId) {
   return { path: "agents.md", lines };
 }
 
+/**
+ * AI summary of unresolved review comments (PLANS 9 "AI summarize").
+ * Uses the configured chat-completions endpoint; read-only over review
+ * state, no tools, single call.
+ */
+async function summarizeComments(projectId) {
+  const settings = await getSettings();
+  if (!settings.enabled || !settings.baseUrl || !settings.apiKey) {
+    throw new OError("AI is not configured");
+  }
+  const ReviewService = (await import("../Review/ReviewService.mjs")).default;
+  const status = await ReviewService.promises.getReviewStatus(projectId);
+  if (status.total === 0) {
+    return { summary: "No review comments in this project.", unresolved: 0 };
+  }
+  const listing = status.threads
+    .map(t => `- [${t.resolved ? "resolved" : "unresolved"}] ${t.firstMessage}`)
+    .join("\n");
+  const raw = await fetchString(`${settings.baseUrl}/chat/completions`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${settings.apiKey || ""}`,
+    },
+    body: JSON.stringify({
+      model: settings.model,
+      messages: [
+        {
+          role: "system",
+          content:
+            "Summarize the state of review comments for this academic writing project in 2-4 short sentences. Mention themes and the most urgent item. Do not invent comments.",
+        },
+        {
+          role: "user",
+          content: `Total: ${status.total}, unresolved: ${status.unresolved}.\n${listing}`,
+        },
+      ],
+    }),
+  });
+  const parsed = JSON.parse(raw);
+  const summary =
+    parsed.choices?.[0]?.message?.content || "Summary unavailable.";
+  return { summary, unresolved: status.unresolved, total: status.total };
+}
+
 export default {
+  summarizeComments,
   getSettings,
   saveSettings,
   runAgent,
@@ -456,6 +502,7 @@ export default {
   getProjectContext,
   simpleDiff,
   promises: {
+    summarizeComments,
     getSettings,
     saveSettings,
     runAgent,

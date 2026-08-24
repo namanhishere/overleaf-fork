@@ -27,13 +27,41 @@ function ProjectReview({ projectId }: { projectId: string }) {
   const [data, setData] = useState<ReviewData | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [selectedMember, setSelectedMember] = useState('')
+  const [summary, setSummary] = useState<string | null>(null)
+  const [summarizing, setSummarizing] = useState(false)
+  const [gitInfo, setGitInfo] = useState<{
+    enabled: boolean
+    cloneUrl: string | null
+    authNote?: string
+  } | null>(null)
 
   async function refresh() {
     setError(null)
     try {
       setData(await getJSON<ReviewData>(`/project/${projectId}/api/review`))
+      getJSON<{ enabled: boolean; cloneUrl: string | null; authNote?: string }>(
+        `/project/${projectId}/api/git`
+      )
+        .then(setGitInfo)
+        .catch(() => {})
     } catch (err) {
       setError(String((err as Error).message))
+    }
+  }
+
+  async function summarize() {
+    setError(null)
+    setSummarizing(true)
+    try {
+      const res = await postJSON(
+        `/project/${projectId}/api/review/summarize`,
+        { body: {} }
+      )
+      setSummary(res.summary)
+    } catch (err) {
+      setError(String((err as Error).message))
+    } finally {
+      setSummarizing(false)
     }
   }
 
@@ -88,8 +116,18 @@ function ProjectReview({ projectId }: { projectId: string }) {
       ) : (
         <>
           <p>
-            <strong>{data.summary}</strong>
+            <strong>{data.summary}</strong>{' '}
+            <button
+              className="btn btn-xs btn-default"
+              disabled={summarizing}
+              onClick={summarize}
+            >
+              {summarizing ? 'Summarizing…' : 'AI summarize'}
+            </button>
           </p>
+          {summary ? (
+            <p style={{ maxWidth: 720, fontStyle: 'italic' }}>{summary}</p>
+          ) : null}
 
           <h2>Comment threads</h2>
           {data.threads.length === 0 ? (
@@ -160,6 +198,18 @@ function ProjectReview({ projectId }: { projectId: string }) {
               Assign
             </button>
           </form>
+
+          <h2>Git</h2>
+          {gitInfo && gitInfo.enabled && gitInfo.cloneUrl ? (
+            <p>
+              Clone:{' '}
+              <code>{gitInfo.cloneUrl}</code>
+              <br />
+              <small>{gitInfo.authNote}</small>
+            </p>
+          ) : (
+            <p>Git integration is not available for this deployment.</p>
+          )}
         </>
       )}
     </div>

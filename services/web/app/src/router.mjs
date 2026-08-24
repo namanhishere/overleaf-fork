@@ -1309,6 +1309,16 @@ async function initialize(webRouter, privateApiRouter, publicApiRouter) {
     ReviewController.reopenThread,
   );
   webRouter.get(
+    "/project/:Project_id/api/git",
+    AuthorizationMiddleware.ensureUserCanReadProject,
+    ReviewController.getGitInfo,
+  );
+  webRouter.post(
+    "/project/:Project_id/api/review/summarize",
+    AuthorizationMiddleware.ensureUserCanReadProject,
+    ReviewController.summarizeComments,
+  );
+  webRouter.get(
     "/admin/ai",
     AuthorizationMiddleware.ensureUserIsSiteAdmin,
     (req, res) => res.render("admin/ai"),

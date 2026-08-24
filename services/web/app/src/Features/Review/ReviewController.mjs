@@ -48,6 +48,35 @@ async function removeReviewer(req, res) {
   res.json({ reviewers });
 }
 
+// GET /project/:Project_id/api/git — clone URL and integration status
+async function getGitInfo(req, res) {
+  const { default: GitIntegrationService } = await import(
+    "../GitIntegration/GitIntegrationService.mjs"
+  );
+  const info = await GitIntegrationService.promises.getGitInfo(
+    req.params.Project_id,
+    _userId(req),
+  );
+  res.json(info);
+}
+
+// POST /project/:Project_id/api/review/summarize — AI summary of comments
+async function summarizeComments(req, res) {
+  try {
+    const AiAgentService = (await import("../AiAgent/AiAgentService.mjs")).default;
+    const result = await AiAgentService.promises.summarizeComments(
+      req.params.Project_id,
+    );
+    res.json(result);
+  } catch (err) {
+    const msg = String(err?.message || err);
+    if (msg.includes("AI is not configured")) {
+      return res.status(400).json({ error: msg });
+    }
+    throw err;
+  }
+}
+
 // POST /project/:Project_id/api/review/threads/:threadId/resolve
 async function resolveThread(req, res) {
   const ChatApiHandler = (await import("../Chat/ChatApiHandler.mjs")).default;
@@ -76,4 +105,6 @@ export default {
   removeReviewer: expressify(removeReviewer),
   resolveThread: expressify(resolveThread),
   reopenThread: expressify(reopenThread),
+  getGitInfo: expressify(getGitInfo),
+  summarizeComments: expressify(summarizeComments),
 };
