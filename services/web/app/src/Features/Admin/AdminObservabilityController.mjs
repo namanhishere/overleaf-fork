@@ -83,16 +83,63 @@ async function workerHealth() {
   }
 }
 
+// AI usage and estimated cost over the window (PLANS 18 "AI usage/cost").
+// Prices are $ per 1M tokens, configurable via Settings.aiUsagePricing so
+// estimates track the deployed provider without rewriting history.
+async function aiUsageStats(since) {
+  const { AiUsage } = await import("../../models/AiUsage.mjs");
+  const Settings = (await import("@overleaf/settings")).default;
+  const pricing = Settings.aiUsagePricing || {
+    prompt: 0.15,
+    completion: 0.6,
+  };
+  const rows = await AiUsage.aggregate([
+    { $match: { createdAt: { $gte: since } } },
+    {
+      $group: {
+        _id: "$purpose",
+        requests: { $sum: 1 },
+        promptTokens: { $sum: "$promptTokens" },
+        completionTokens: { $sum: "$completionTokens" },
+      },
+    },
+  ]);
+  const byPurpose = rows.map((r) => ({
+    purpose: r._id,
+    requests: r.requests,
+    promptTokens: r.promptTokens,
+    completionTokens: r.completionTokens,
+    estimatedCost:
+      Math.round(
+        ((r.promptTokens / 1e6) * pricing.prompt +
+          (r.completionTokens / 1e6) * pricing.completion) *
+          10000,
+      ) / 10000,
+  }));
+  const totals = byPurpose.reduce(
+    (acc, r) => ({
+      requests: acc.requests + r.requests,
+      promptTokens: acc.promptTokens + r.promptTokens,
+      completionTokens: acc.completionTokens + r.completionTokens,
+      estimatedCost: acc.estimatedCost + r.estimatedCost,
+    }),
+    { requests: 0, promptTokens: 0, completionTokens: 0, estimatedCost: 0 },
+  );
+  return { byPurpose, totals, pricing };
+}
+
 // GET /admin/api/observability
 async function getObservability(req, res) {
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const [compiles, users, auditEntries, queue, workers] = await Promise.all([
-    compileStats(since),
-    userStats(),
-    auditStats(since),
-    queueStats(),
-    workerHealth(),
-  ]);
+  const [compiles, users, auditEntries, queue, workers, aiUsage] =
+    await Promise.all([
+      compileStats(since),
+      userStats(),
+      auditStats(since),
+      queueStats(),
+      workerHealth(),
+      aiUsageStats(since),
+    ]);
   res.json({
     window: { since: since.toISOString(), hours: 24 },
     compiles,
@@ -100,6 +147,7 @@ async function getObservability(req, res) {
     auditEntries,
     queue,
     workers,
+    aiUsage,
     generatedAt: new Date().toISOString(),
   });
 }

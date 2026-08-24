@@ -19,6 +19,22 @@ type Observability = {
     checkedAt: string;
     workers: Array<{ id: string; ok: boolean; error?: string }>;
   } | null;
+  aiUsage: {
+    byPurpose: Array<{
+      purpose: string;
+      requests: number;
+      promptTokens: number;
+      completionTokens: number;
+      estimatedCost: number;
+    }>;
+    totals: {
+      requests: number;
+      promptTokens: number;
+      completionTokens: number;
+      estimatedCost: number;
+    };
+    pricing: { prompt: number; completion: number };
+  };
   generatedAt: string;
 };
 
@@ -141,6 +157,70 @@ function ObservabilityDashboard() {
             </table>
           ) : (
             <p>No worker health data yet — visit the Workers page.</p>
+          )}
+          <h2>AI usage (24h)</h2>
+          <div
+            style={{
+              display: "flex",
+              gap: 32,
+              flexWrap: "wrap",
+              marginBottom: 24,
+            }}
+          >
+            <Stat label="AI requests" value={data.aiUsage.totals.requests} />
+            <Stat
+              label="Prompt tokens"
+              value={data.aiUsage.totals.promptTokens.toLocaleString()}
+            />
+            <Stat
+              label="Completion tokens"
+              value={data.aiUsage.totals.completionTokens.toLocaleString()}
+            />
+            <Stat
+              label={`Estimated cost ($${data.aiUsage.pricing.prompt}/$${data.aiUsage.pricing.completion} per 1M tok)`}
+              value={`$${data.aiUsage.totals.estimatedCost.toFixed(4)}`}
+            />
+          </div>
+          {data.aiUsage.byPurpose.length > 0 ? (
+            <table style={{ marginBottom: 24, borderCollapse: "collapse" }}>
+              <thead>
+                <tr>
+                  {[
+                    "Purpose",
+                    "Requests",
+                    "Prompt tok",
+                    "Completion tok",
+                    "Est. cost",
+                  ].map((h) => (
+                    <th
+                      key={h}
+                      style={{ textAlign: "left", padding: "4px 16px 4px 0" }}
+                    >
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {data.aiUsage.byPurpose.map((r) => (
+                  <tr key={r.purpose}>
+                    <td style={{ paddingRight: 16 }}>{r.purpose}</td>
+                    <td style={{ paddingRight: 16 }}>{r.requests}</td>
+                    <td style={{ paddingRight: 16 }}>
+                      {r.promptTokens.toLocaleString()}
+                    </td>
+                    <td style={{ paddingRight: 16 }}>
+                      {r.completionTokens.toLocaleString()}
+                    </td>
+                    <td style={{ paddingRight: 16 }}>
+                      ${r.estimatedCost.toFixed(4)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <p>No AI usage recorded in this window.</p>
           )}
         </>
       ) : null}

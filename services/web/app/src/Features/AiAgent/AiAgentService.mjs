@@ -649,7 +649,7 @@ function toolDefs(permissions) {
     .map(([, def]) => def);
 }
 
-async function chatCompletion(settings, messages, tools = []) {
+async function chatCompletion(settings, messages, tools = [], meta = {}) {
   const raw = await fetchString(`${settings.baseUrl}/chat/completions`, {
     method: "POST",
     headers: {
@@ -662,7 +662,24 @@ async function chatCompletion(settings, messages, tools = []) {
       tools,
     }),
   });
-  return JSON.parse(raw);
+  const parsed = JSON.parse(raw);
+  // record usage for observability (PLANS 18); never block on failure
+  try {
+    const usage = parsed.usage || {};
+    if (usage.prompt_tokens != null || usage.completion_tokens != null) {
+      const { AiUsage } = await import("../../models/AiUsage.mjs");
+      await AiUsage.create({
+        model: settings.model || "unknown",
+        purpose: meta.purpose || "other",
+        promptTokens: usage.prompt_tokens || 0,
+        completionTokens: usage.completion_tokens || 0,
+        projectId: meta.projectId || undefined,
+      });
+    }
+  } catch {
+    // usage tracking must never break agent runs
+  }
+  return parsed;
 }
 
 async function runAgent(projectId, userId, task) {
@@ -707,7 +724,10 @@ async function runAgent(projectId, userId, task) {
   const latestCompile = { status: null };
 
   for (let iteration = 0; iteration < maxIterations; iteration++) {
-    const response = await chatCompletion(settings, messages, tools);
+    const response = await chatCompletion(settings, messages, tools, {
+      purpose: "agent",
+      projectId,
+    });
     const message = response.choices?.[0]?.message;
     if (message == null) throw new OError("empty AI response");
 
@@ -976,28 +996,22 @@ async function summarizeComments(projectId) {
       (t) => `- [${t.resolved ? "resolved" : "unresolved"}] ${t.firstMessage}`,
     )
     .join("\n");
-  const raw = await fetchString(`${settings.baseUrl}/chat/completions`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${settings.apiKey || ""}`,
-    },
-    body: JSON.stringify({
-      model: settings.model,
-      messages: [
-        {
-          role: "system",
-          content:
-            "Summarize the state of review comments for this academic writing project in 2-4 short sentences. Mention themes and the most urgent item. Do not invent comments.",
-        },
-        {
-          role: "user",
-          content: `Total: ${status.total}, unresolved: ${status.unresolved}.\n${listing}`,
-        },
-      ],
-    }),
-  });
-  const parsed = JSON.parse(raw);
+  const parsed = await chatCompletion(
+    { ...settings, model: settings.model },
+    [
+      {
+        role: "system",
+        content:
+          "Summarize the state of review comments for this academic writing project in 2-4 short sentences. Mention themes and the most urgent item. Do not invent comments.",
+      },
+      {
+        role: "user",
+        content: `Total: ${status.total}, unresolved: ${status.unresolved}.\n${listing}`,
+      },
+    ],
+    [],
+    { purpose: "summarize", projectId },
+  );
   const summary =
     parsed.choices?.[0]?.message?.content || "Summary unavailable.";
   return { summary, unresolved: status.unresolved, total: status.total };

@@ -131,6 +131,16 @@ describe("AiAgentService", function () {
     vi.doMock("@overleaf/fetch-utils", () => ({
       fetchString: ctx.fetchString,
     }));
+    ctx.AiUsageDocs = [];
+    ctx.AiUsage = {
+      create: sinon.stub().callsFake(async (doc) => {
+        ctx.AiUsageDocs.push(doc);
+        return doc;
+      }),
+    };
+    vi.doMock("../../../../../app/src/models/AiUsage.mjs", () => ({
+      AiUsage: ctx.AiUsage,
+    }));
     ctx.CompileJobManager = {
       promises: {
         listForProject: sinon
@@ -360,6 +370,60 @@ describe("AiAgentService", function () {
       }
       expect(err).to.exist;
       expect(err.message).to.include("undo refused");
+    });
+  });
+
+  describe("AI usage tracking (PLANS 18)", function () {
+    it("records token usage from provider responses", async function (ctx) {
+      ctx.AiSettings.findOne.returns({
+        lean: () => ({
+          exec: async () => ({
+            enabled: true,
+            baseUrl: "http://ai.test",
+            apiKey: "k",
+            model: "gpt-test",
+            permissions: { readFiles: true },
+          }),
+        }),
+      });
+      ctx.fetchString.onFirstCall().resolves(
+        JSON.stringify({
+          choices: [{ message: { content: "done" } }],
+          usage: { prompt_tokens: 100, completion_tokens: 20 },
+        }),
+      );
+      await ctx.service.promises.runAgent("p1", "u1", "hello");
+      expect(ctx.AiUsageDocs).to.have.length(1);
+      const rec = ctx.AiUsageDocs[0];
+      expect(rec.model).to.equal("gpt-test");
+      expect(rec.purpose).to.equal("agent");
+      expect(rec.promptTokens).to.equal(100);
+      expect(rec.completionTokens).to.equal(20);
+    });
+
+    it("never breaks the agent run when usage recording fails", async function (ctx) {
+      ctx.AiSettings.findOne.returns({
+        lean: () => ({
+          exec: async () => ({
+            enabled: true,
+            baseUrl: "http://ai.test",
+            apiKey: "k",
+            model: "m",
+            permissions: { readFiles: true },
+          }),
+        }),
+      });
+      ctx.AiUsage.create.rejects(new Error("db down"));
+      ctx.fetchString.resolves(
+        JSON.stringify({
+          choices: [{ message: { content: "ok" } }],
+          usage: { prompt_tokens: 1, completion_tokens: 1 },
+        }),
+      );
+      const result = await ctx.service.promises.runAgent("p1", "u1", "hi");
+      expect(
+        result.transcript[result.transcript.length - 1].assistant,
+      ).to.equal("ok");
     });
   });
 
