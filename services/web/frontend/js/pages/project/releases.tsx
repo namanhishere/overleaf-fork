@@ -1,6 +1,7 @@
 import { createRoot } from "react-dom/client";
 import { useEffect, useState } from "react";
 import { getJSON, postJSON } from "@/infrastructure/fetch-json";
+import ProjectToolNav from "@/shared/components/project-tool-nav";
 
 type Release = {
   _id: string;
@@ -114,7 +115,7 @@ function ReleasesDashboard() {
     <div>
       <h1>Releases</h1>
       <p>
-        <a href={`/project/${projectId}`}>Back to project</a>
+        <ProjectToolNav projectId={projectId} />
       </p>
       <p>
         Pin a compiled build as an immutable, traceable release: the source

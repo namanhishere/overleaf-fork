@@ -1,6 +1,7 @@
 import { createRoot } from "react-dom/client";
 import { useEffect, useRef, useState } from "react";
 import { getJSON } from "@/infrastructure/fetch-json";
+import ProjectToolNav from "@/shared/components/project-tool-nav";
 
 type Artifact = {
   path: string;
@@ -74,7 +75,7 @@ function ProjectArtifacts({ projectId }: { projectId: string }) {
     <div className="container">
       <h1>Research artifacts</h1>
       <p>
-        <a href={`/project/${projectId}`}>Back to project</a> ·{" "}
+        <ProjectToolNav projectId={projectId} /> ·{" "}
         <a href={`/project/${projectId}/secrets`}>Secrets</a> ·{" "}
         <a href={`/project/${projectId}/ai`}>AI assistant</a>
       </p>

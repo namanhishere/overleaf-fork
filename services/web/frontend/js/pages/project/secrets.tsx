@@ -1,6 +1,7 @@
 import { createRoot } from "react-dom/client";
 import { useEffect, useState } from "react";
 import { getJSON, postJSON } from "@/infrastructure/fetch-json";
+import ProjectToolNav from "@/shared/components/project-tool-nav";
 
 type SecretMeta = {
   key: string;
@@ -70,7 +71,7 @@ function ProjectSecrets({ projectId }: { projectId: string }) {
     <div className="container">
       <h1>Project secrets</h1>
       <p>
-        <a href={`/project/${projectId}`}>Back to project</a> ·{" "}
+        <ProjectToolNav projectId={projectId} /> ·{" "}
         <a href={`/project/${projectId}/ai`}>AI assistant</a>
       </p>
       <p>

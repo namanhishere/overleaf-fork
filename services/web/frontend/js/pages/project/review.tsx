@@ -1,6 +1,7 @@
 import { createRoot } from "react-dom/client";
 import { useEffect, useState } from "react";
 import { getJSON, postJSON } from "@/infrastructure/fetch-json";
+import ProjectToolNav from "@/shared/components/project-tool-nav";
 
 type Thread = {
   threadId: string;
@@ -131,7 +132,7 @@ function ProjectReview({ projectId }: { projectId: string }) {
     <div className="container">
       <h1>Review</h1>
       <p>
-        <a href={`/project/${projectId}`}>Back to project</a>
+        <ProjectToolNav projectId={projectId} />
       </p>
       {error ? <p className="text-danger">{error}</p> : null}
       {!data ? (

@@ -1,6 +1,7 @@
 import { createRoot } from "react-dom/client";
 import { useEffect, useState } from "react";
 import { getJSON, postJSON } from "@/infrastructure/fetch-json";
+import ProjectToolNav from "@/shared/components/project-tool-nav";
 
 type ProposalHunk = {
   beforeStart: number;
@@ -145,7 +146,7 @@ function ProjectAi({ projectId }: { projectId: string }) {
     <div className="container">
       <h1>AI assistant</h1>
       <p>
-        <a href={`/project/${projectId}`}>Back to project</a> ·{" "}
+        <ProjectToolNav projectId={projectId} /> ·{" "}
         <button className="btn btn-default btn-sm" onClick={runInit}>
           /init — generate agents.md
         </button>{" "}
