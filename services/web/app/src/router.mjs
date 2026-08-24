@@ -35,6 +35,7 @@ import AdminWorkersController from "./Features/Admin/AdminWorkersController.mjs"
 import AdminStorageHealthController from "./Features/Admin/AdminStorageHealthController.mjs";
 import AdminBackupController from "./Features/Admin/AdminBackupController.mjs";
 import MarkdownController from "./Features/Markdown/MarkdownController.mjs";
+import AiAgentController from "./Features/AiAgent/AiAgentController.mjs";
 import SsoController from "./Features/Authentication/SsoController.mjs";
 import HealthCheckController from "./Features/HealthCheck/HealthCheckController.mjs";
 import ProjectDownloadsController from "./Features/Downloads/ProjectDownloadsController.mjs";
@@ -1202,6 +1203,54 @@ async function initialize(webRouter, privateApiRouter, publicApiRouter) {
     "/project/:Project_id/api/markdown/:doc_id/convert-to-latex",
     AuthorizationMiddleware.ensureUserCanWriteProjectContent,
     MarkdownController.convertToLatex,
+  );
+  webRouter.get(
+    "/project/:Project_id/ai",
+    AuthorizationMiddleware.ensureUserCanReadProject,
+    (req, res) =>
+      res.render("project/ai", {
+        projectId: req.params.Project_id,
+      }),
+  );
+  webRouter.get(
+    "/project/:Project_id/api/ai/proposals",
+    AuthorizationMiddleware.ensureUserCanReadProject,
+    AiAgentController.listProposals,
+  );
+  webRouter.post(
+    "/project/:Project_id/api/ai/run",
+    AuthorizationMiddleware.ensureUserCanWriteProjectContent,
+    AiAgentController.runAgent,
+  );
+  webRouter.post(
+    "/project/:Project_id/api/ai/proposals/:proposalId/apply",
+    AuthorizationMiddleware.ensureUserCanWriteProjectContent,
+    AiAgentController.applyProposal,
+  );
+  webRouter.post(
+    "/project/:Project_id/api/ai/proposals/:proposalId/reject",
+    AuthorizationMiddleware.ensureUserCanWriteProjectContent,
+    AiAgentController.rejectProposal,
+  );
+  webRouter.post(
+    "/project/:Project_id/api/ai/init",
+    AuthorizationMiddleware.ensureUserCanWriteProjectContent,
+    AiAgentController.init,
+  );
+  webRouter.get(
+    "/admin/ai",
+    AuthorizationMiddleware.ensureUserIsSiteAdmin,
+    (req, res) => res.render("admin/ai"),
+  );
+  webRouter.get(
+    "/admin/api/ai",
+    AuthorizationMiddleware.ensureUserIsSiteAdmin,
+    AiAgentController.getSettings,
+  );
+  webRouter.put(
+    "/admin/api/ai",
+    AuthorizationMiddleware.ensureUserIsSiteAdmin,
+    AiAgentController.saveSettings,
   );
   webRouter.get(
     "/admin/profiles",

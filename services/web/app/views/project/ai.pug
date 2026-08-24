@@ -1,0 +1,10 @@
+extends ../layout-react
+
+block vars
+	- projectId = projectId
+
+block entrypointVar
+	- entrypoint = 'pages/project/ai'
+
+block content
+	main#project-ai-root.content.content-alt(data-project-id=projectId)
