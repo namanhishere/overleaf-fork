@@ -464,7 +464,48 @@ describe("AiAgentService", function () {
 
     it("skips bibliography.md without .bib files", async function (ctx) {
       const result = await ctx.service.promises.generateInitDoc("p1", "u1");
-      expect(result.files).to.deep.equal(["agents.md", "constraints.md"]);
+      expect(result.files).to.include("agents.md");
+      expect(result.files).to.include("constraints.md");
+      expect(result.files).to.not.include("bibliography.md");
+    });
+
+    it("generates style.md and terminology.md from tex analysis", async function (ctx) {
+      ctx.ProjectGetter.promises.getProject.callsFake(async (pid, proj) => {
+        if (proj && proj.owner_ref != null) return { owner_ref: "u1" };
+        return {
+          rootFolder: [
+            {
+              docs: [{ _id: "d1", name: "main.tex" }],
+              folders: [],
+              fileRefs: [],
+            },
+          ],
+        };
+      });
+      ctx.ProjectEntityHandler.promises.getDoc.resolves({
+        lines: [
+          "\\documentclass{IEEEtran}",
+          "\\usepackage{amsmath}",
+          "\\begin{document}",
+          "The LSTM model outperforms the SVM baseline. The LSTM uses CNN features.",
+          "\\section{Method}",
+          "\\end{document}",
+        ],
+      });
+      const result = await ctx.service.promises.generateInitDoc("p1", "u1");
+      expect(result.files).to.include("style.md");
+      expect(result.files).to.include("terminology.md");
+      const styleCall = ctx.EditorController.promises.upsertDocWithPath
+        .getCalls()
+        .find((c) => c.args[1] === "/style.md");
+      expect(styleCall.args[2].join("\n")).to.contain("IEEEtran");
+      expect(styleCall.args[2].join("\n")).to.contain("amsmath");
+      const termCall = ctx.EditorController.promises.upsertDocWithPath
+        .getCalls()
+        .find((c) => c.args[1] === "/terminology.md");
+      const terms = termCall.args[2].join("\n");
+      expect(terms).to.contain("LSTM");
+      expect(terms).to.contain("SVM");
     });
 
     it("always generates constraints.md", async function (ctx) {
