@@ -427,6 +427,111 @@ describe("AiAgentService", function () {
     });
   });
 
+  describe("agent failure presentation (PLANS 13)", function () {
+    it("returns final compile status and log excerpt", async function (ctx) {
+      ctx.AiSettings.findOne.returns({
+        lean: () => ({
+          exec: async () => ({
+            enabled: true,
+            baseUrl: "http://ai.test",
+            apiKey: "k",
+            model: "m",
+            permissions: { readFiles: true, compile: true },
+          }),
+        }),
+      });
+      ctx.CompileManager.promises.compile.resolves({
+        status: "failed",
+        outputFiles: [],
+      });
+      ctx.fetchString.onFirstCall().resolves(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                tool_calls: [
+                  {
+                    id: "c1",
+                    function: { name: "compile_project", arguments: "{}" },
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+      );
+      ctx.fetchString
+        .onSecondCall()
+        .resolves(
+          JSON.stringify({
+            choices: [{ message: { content: "still failing" } }],
+          }),
+        );
+      const result = await ctx.service.promises.runAgent("p1", "u1", "fix");
+      expect(result.compile.status).to.equal("failed");
+      expect(result.compile.logExcerpt).to.equal("ok");
+    });
+
+    it("omits compile info when no compile ran", async function (ctx) {
+      ctx.AiSettings.findOne.returns({
+        lean: () => ({
+          exec: async () => ({
+            enabled: true,
+            baseUrl: "http://ai.test",
+            apiKey: "k",
+            model: "m",
+            permissions: { readFiles: true },
+          }),
+        }),
+      });
+      ctx.fetchString.resolves(
+        JSON.stringify({ choices: [{ message: { content: "hi" } }] }),
+      );
+      const result = await ctx.service.promises.runAgent("p1", "u1", "hello");
+      expect(result.compile.status).to.be.null;
+    });
+  });
+
+  describe("list_secrets tool (PLANS 10/15)", function () {
+    it("is denied without the secrets permission", async function (ctx) {
+      ctx.AiSettings.findOne.returns({
+        lean: () => ({
+          exec: async () => ({
+            enabled: true,
+            baseUrl: "http://ai.test",
+            apiKey: "k",
+            model: "m",
+            permissions: { readFiles: true, secrets: false },
+          }),
+        }),
+      });
+      ctx.fetchString.onFirstCall().resolves(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                tool_calls: [
+                  {
+                    id: "c9",
+                    function: { name: "list_secrets", arguments: "{}" },
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+      );
+      ctx.fetchString
+        .onSecondCall()
+        .resolves(
+          JSON.stringify({ choices: [{ message: { content: "done" } }] }),
+        );
+      const result = await ctx.service.promises.runAgent("p1", "u1", "secrets");
+      const call = result.transcript.find((t) => t.tool === "list_secrets");
+      expect(JSON.parse(call.result).denied).to.be.true;
+    });
+  });
+
   describe("AI permission model", function () {
     it("defaults deny dangerous capabilities", async function (ctx) {
       const settings = await ctx.service.promises.getSettings();
