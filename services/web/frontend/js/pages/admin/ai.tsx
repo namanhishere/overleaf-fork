@@ -2,13 +2,34 @@ import { createRoot } from "react-dom/client";
 import { useEffect, useState } from "react";
 import { getJSON, putJSON } from "@/infrastructure/fetch-json";
 
+type AiPermissions = {
+  readFiles: boolean;
+  writeFiles: boolean;
+  deleteFiles: boolean;
+  compile: boolean;
+  git: boolean;
+  secrets: boolean;
+  snapshots: boolean;
+};
+
 type AiSettings = {
   enabled: boolean;
   baseUrl: string | null;
   model: string | null;
   maxIterations: number;
   apiKeySaved: boolean;
+  permissions: AiPermissions;
 };
+
+const PERMISSION_LABELS: Array<[keyof AiPermissions, string]> = [
+  ["readFiles", "Read files"],
+  ["writeFiles", "Edit and create .tex/.md files (approval required)"],
+  ["deleteFiles", "Propose file deletion (approval required)"],
+  ["compile", "Compile project"],
+  ["git", "Git integration access"],
+  ["secrets", "Access project secrets"],
+  ["snapshots", "Create and propose restores of release snapshots"],
+];
 
 function AdminAi() {
   const [settings, setSettings] = useState<AiSettings | null>(null);
@@ -34,6 +55,7 @@ function AdminAi() {
         baseUrl: settings!.baseUrl,
         model: settings!.model,
         maxIterations: settings!.maxIterations,
+        permissions: settings!.permissions,
       };
       if (apiKey) body.apiKey = apiKey;
       await putJSON("/admin/api/ai", { body });
@@ -117,6 +139,28 @@ function AdminAi() {
           />
         </label>
         <br />
+        <br />
+        <fieldset>
+          <legend>AI permissions</legend>
+          {PERMISSION_LABELS.map(([key, label]) => (
+            <label key={key} style={{ display: "block" }}>
+              <input
+                type="checkbox"
+                checked={settings.permissions[key]}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    permissions: {
+                      ...settings.permissions,
+                      [key]: e.target.checked,
+                    },
+                  })
+                }
+              />{" "}
+              {label}
+            </label>
+          ))}
+        </fieldset>
         <br />
         <button type="submit" className="btn btn-primary">
           Save

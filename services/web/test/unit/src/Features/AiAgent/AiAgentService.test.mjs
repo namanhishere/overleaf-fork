@@ -125,6 +125,17 @@ describe("AiAgentService", function () {
     vi.doMock("@overleaf/fetch-utils", () => ({
       fetchString: ctx.fetchString,
     }));
+    ctx.CompileJobManager = {
+      promises: {
+        listForProject: sinon
+          .stub()
+          .resolves([{ jobId: "job-1", buildId: "build-1", logExcerpt: "ok" }]),
+      },
+    };
+    vi.doMock(
+      "../../../../../app/src/Features/Compile/CompileJobManager.mjs",
+      () => ({ default: ctx.CompileJobManager }),
+    );
     ctx.ReviewService = {
       promises: {
         getReviewStatus: sinon.stub().resolves({
@@ -251,6 +262,116 @@ describe("AiAgentService", function () {
       expect(result.path).to.equal("agents.md");
       expect(result.lines.join("\n")).to.contain("main.tex");
       expect(result.lines.join("\n")).to.contain("notes.md");
+    });
+  });
+
+  describe("AI permission model", function () {
+    it("defaults deny dangerous capabilities", async function (ctx) {
+      const settings = await ctx.service.promises.getSettings();
+      expect(settings.permissions.deleteFiles).to.be.false;
+      expect(settings.permissions.git).to.be.false;
+      expect(settings.permissions.secrets).to.be.false;
+      expect(settings.permissions.readFiles).to.be.true;
+    });
+
+    it("persists permission changes", async function (ctx) {
+      await ctx.service.promises.saveSettings({
+        permissions: { deleteFiles: true },
+      });
+      const patch = ctx.AiSettings.updateOne.firstCall.args[1].$set;
+      expect(patch["permissions.deleteFiles"]).to.be.true;
+      expect(patch["permissions.git"]).to.be.undefined;
+    });
+  });
+
+  describe("agent tool permissions in runAgent", function () {
+    it("executes permitted search_files and returns matches", async function (ctx) {
+      ctx.AiSettings.findOne.returns({
+        lean: () => ({
+          exec: async () => ({
+            enabled: true,
+            baseUrl: "http://ai.test",
+            apiKey: "k",
+            model: "m",
+            permissions: { readFiles: true },
+          }),
+        }),
+      });
+      ctx.fetchString.onFirstCall().resolves(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                tool_calls: [
+                  {
+                    id: "c1",
+                    function: {
+                      name: "search_files",
+                      arguments: JSON.stringify({ query: "section" }),
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+      );
+      ctx.fetchString
+        .onSecondCall()
+        .resolves(
+          JSON.stringify({ choices: [{ message: { content: "done" } }] }),
+        );
+      const result = await ctx.service.promises.runAgent("p1", "u1", "find");
+      const searchCall = result.transcript.find(
+        (t) => t.tool === "search_files",
+      );
+      expect(searchCall).to.exist;
+      const parsed = JSON.parse(searchCall.result);
+      expect(parsed.matches.length).to.be.greaterThan(0);
+    });
+
+    it("denies tools blocked by permissions without creating proposals", async function (ctx) {
+      ctx.AiSettings.findOne.returns({
+        lean: () => ({
+          exec: async () => ({
+            enabled: true,
+            baseUrl: "http://ai.test",
+            apiKey: "k",
+            model: "m",
+            permissions: { readFiles: true, deleteFiles: false },
+          }),
+        }),
+      });
+      ctx.fetchString.onFirstCall().resolves(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                tool_calls: [
+                  {
+                    id: "c2",
+                    function: {
+                      name: "propose_delete_file",
+                      arguments: JSON.stringify({ path: "main.tex" }),
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+      );
+      ctx.fetchString
+        .onSecondCall()
+        .resolves(
+          JSON.stringify({ choices: [{ message: { content: "done" } }] }),
+        );
+      const result = await ctx.service.promises.runAgent("p1", "u1", "clean");
+      const call = result.transcript.find(
+        (t) => t.tool === "propose_delete_file",
+      );
+      const parsed = JSON.parse(call.result);
+      expect(parsed.denied).to.be.true;
     });
   });
 

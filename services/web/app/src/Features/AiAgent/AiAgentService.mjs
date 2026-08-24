@@ -25,7 +25,96 @@ async function getSettings() {
       maxIterations: 3,
     };
   }
-  return { ...doc, apiKey: doc.apiKey || null };
+  return {
+    ...doc,
+    apiKey: doc.apiKey || null,
+    permissions: {
+      readFiles: true,
+      writeFiles: true,
+      deleteFiles: false,
+      compile: true,
+      git: false,
+      secrets: false,
+      snapshots: true,
+      ...(doc.permissions || {}),
+    },
+  };
+}
+
+// tool name -> permission key (PLANS 10 permission model)
+const TOOL_PERMISSIONS = {
+  list_files: "readFiles",
+  read_file: "readFiles",
+  search_files: "readFiles",
+  propose_write_file: "writeFiles",
+  propose_delete_file: "deleteFiles",
+  compile_project: "compile",
+  get_compile_log: "readFiles",
+  inspect_pdf: "compile",
+  git_status: "git",
+  git_diff: "git",
+  create_snapshot: "snapshots",
+  restore_snapshot: "snapshots",
+};
+
+function toolAllowed(toolName, permissions) {
+  const key = TOOL_PERMISSIONS[toolName];
+  if (key == null) return false;
+  return permissions[key] === true;
+}
+
+// ---- additional tool implementations ----
+
+async function searchFiles(projectId, query) {
+  const needle = String(query || "").toLowerCase();
+  if (!needle) return [];
+  const files = await listFiles(projectId);
+  const matches = [];
+  for (const f of files) {
+    if (f.type !== "doc" || matches.length >= 20) continue;
+    const lines = await readDocLines(projectId, f.path);
+    if (lines == null) continue;
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].toLowerCase().includes(needle)) {
+        matches.push({
+          path: f.path,
+          line: i + 1,
+          text: lines[i].slice(0, 200),
+        });
+        if (matches.length >= 20) break;
+      }
+    }
+  }
+  return matches;
+}
+
+async function createDeleteProposal(projectId, userId, { path, summary }) {
+  const normalized = "/" + String(path || "").replace(/^\/+/, "");
+  if (
+    !/^\/[^/]+\.(tex|md|txt|bib)$/i.test(normalized) ||
+    normalized.includes("..")
+  ) {
+    throw new OError("invalid target path", { path });
+  }
+  const previousLines = await readDocLines(projectId, normalized);
+  if (previousLines == null) throw new OError("file not found", { path });
+  const proposal = await AiProposal.create({
+    projectId,
+    userId,
+    path: normalized,
+    previousLines,
+    newLines: [],
+    action: "delete",
+    summary: String(summary || "delete file").slice(0, 500),
+  });
+  return proposal.toObject();
+}
+
+async function getGitStatus(projectId) {
+  const GitIntegrationService = (
+    await import("../GitIntegration/GitIntegrationService.mjs")
+  ).default;
+  return GitIntegrationService.promises.getGitInfo(projectId, null);
 }
 
 async function saveSettings(body) {
@@ -41,6 +130,24 @@ async function saveSettings(body) {
   }
   // apiKey is write-only: only update when a non-empty value arrives
   if (body.apiKey) patch.apiKey = String(body.apiKey);
+  if (body.permissions && typeof body.permissions === "object") {
+    const allowed = [
+      "readFiles",
+      "writeFiles",
+      "deleteFiles",
+      "compile",
+      "git",
+      "secrets",
+      "snapshots",
+    ];
+    const perms = {};
+    for (const key of allowed) {
+      if (body.permissions[key] !== undefined) {
+        perms[`permissions.${key}`] = Boolean(body.permissions[key]);
+      }
+    }
+    Object.assign(patch, perms);
+  }
   await AiSettings.updateOne(
     { key: "global" },
     { $set: patch, $setOnInsert: { key: "global" } },
@@ -149,6 +256,7 @@ async function createProposal(projectId, userId, { path, content, summary }) {
     path,
     previousLines,
     newLines: String(content).split("\n"),
+    action: "write",
     summary: String(summary || "").slice(0, 500),
   });
   return proposal.toObject();
@@ -161,13 +269,22 @@ async function applyProposal(projectId, userId, proposalId) {
     status: "pending",
   });
   if (proposal == null) throw new OError("proposal not found or not pending");
-  await EditorController.promises.upsertDocWithPath(
-    projectId,
-    proposal.path,
-    proposal.newLines,
-    "ai-agent",
-    userId,
-  );
+  if (proposal.action === "delete") {
+    await EditorController.promises.deleteEntityWithPath(
+      projectId,
+      proposal.path,
+      "ai-agent",
+      userId,
+    );
+  } else {
+    await EditorController.promises.upsertDocWithPath(
+      projectId,
+      proposal.path,
+      proposal.newLines,
+      "ai-agent",
+      userId,
+    );
+  }
   proposal.status = "applied";
   proposal.resolvedAt = new Date();
   await proposal.save();
@@ -212,9 +329,9 @@ async function listProposals(projectId, { includeResolved = false } = {}) {
 
 // ---- agent loop (OpenAI-compatible chat completions with tools) ----
 
-function toolDefs() {
-  return [
-    {
+function toolDefs(permissions) {
+  const defs = {
+    list_files: {
       type: "function",
       function: {
         name: "list_files",
@@ -222,7 +339,7 @@ function toolDefs() {
         parameters: { type: "object", properties: {} },
       },
     },
-    {
+    read_file: {
       type: "function",
       function: {
         name: "read_file",
@@ -234,7 +351,20 @@ function toolDefs() {
         },
       },
     },
-    {
+    search_files: {
+      type: "function",
+      function: {
+        name: "search_files",
+        description:
+          "Search all project files for a case-insensitive substring.",
+        parameters: {
+          type: "object",
+          properties: { query: { type: "string" } },
+          required: ["query"],
+        },
+      },
+    },
+    propose_write_file: {
       type: "function",
       function: {
         name: "propose_write_file",
@@ -251,7 +381,23 @@ function toolDefs() {
         },
       },
     },
-    {
+    propose_delete_file: {
+      type: "function",
+      function: {
+        name: "propose_delete_file",
+        description:
+          "Propose deleting a file. The human must approve the deletion before it is applied.",
+        parameters: {
+          type: "object",
+          properties: {
+            path: { type: "string" },
+            summary: { type: "string" },
+          },
+          required: ["path"],
+        },
+      },
+    },
+    compile_project: {
       type: "function",
       function: {
         name: "compile_project",
@@ -259,7 +405,7 @@ function toolDefs() {
         parameters: { type: "object", properties: {} },
       },
     },
-    {
+    get_compile_log: {
       type: "function",
       function: {
         name: "get_compile_log",
@@ -267,10 +413,72 @@ function toolDefs() {
         parameters: { type: "object", properties: {} },
       },
     },
-  ];
+    inspect_pdf: {
+      type: "function",
+      function: {
+        name: "inspect_pdf",
+        description:
+          "List the output files (including the PDF) of the most recent compile with sizes.",
+        parameters: { type: "object", properties: {} },
+      },
+    },
+    git_status: {
+      type: "function",
+      function: {
+        name: "git_status",
+        description:
+          "Report the git integration status and clone URL for this project.",
+        parameters: { type: "object", properties: {} },
+      },
+    },
+    git_diff: {
+      type: "function",
+      function: {
+        name: "git_diff",
+        description:
+          "Report how to diff project changes with git (the platform delegates diffs to git itself).",
+        parameters: { type: "object", properties: {} },
+      },
+    },
+    create_snapshot: {
+      type: "function",
+      function: {
+        name: "create_snapshot",
+        description:
+          "Create an immutable release snapshot of the latest successful compile. Requires a tag.",
+        parameters: {
+          type: "object",
+          properties: {
+            tag: { type: "string" },
+            notes: { type: "string" },
+          },
+          required: ["tag"],
+        },
+      },
+    },
+    restore_snapshot: {
+      type: "function",
+      function: {
+        name: "restore_snapshot",
+        description:
+          "Propose restoring a file's content from a project history version. The human must approve the restore.",
+        parameters: {
+          type: "object",
+          properties: {
+            version: { type: "number" },
+            path: { type: "string" },
+          },
+          required: ["version", "path"],
+        },
+      },
+    },
+  };
+  return Object.entries(defs)
+    .filter(([name]) => toolAllowed(name, permissions))
+    .map(([, def]) => def);
 }
 
-async function chatCompletion(settings, messages) {
+async function chatCompletion(settings, messages, tools = []) {
   const raw = await fetchString(`${settings.baseUrl}/chat/completions`, {
     method: "POST",
     headers: {
@@ -280,7 +488,7 @@ async function chatCompletion(settings, messages) {
     body: JSON.stringify({
       model: settings.model,
       messages,
-      tools: toolDefs(),
+      tools,
     }),
   });
   return JSON.parse(raw);
@@ -306,6 +514,7 @@ async function runAgent(projectId, userId, task) {
     };
   }
 
+  const permissions = settings.permissions;
   const context = await getProjectContext(projectId);
   const systemPrompt = [
     "You are an academic writing and LaTeX assistant working inside an Overleaf-style project.",
@@ -321,12 +530,13 @@ async function runAgent(projectId, userId, task) {
     { role: "user", content: String(task).slice(0, 4000) },
   ];
 
+  const tools = toolDefs(permissions);
   const transcript = [];
   const proposals = [];
   const latestCompile = { status: null };
 
   for (let iteration = 0; iteration < maxIterations; iteration++) {
-    const response = await chatCompletion(settings, messages);
+    const response = await chatCompletion(settings, messages, tools);
     const message = response.choices?.[0]?.message;
     if (message == null) throw new OError("empty AI response");
 
@@ -337,6 +547,23 @@ async function runAgent(projectId, userId, task) {
         let proposal = null;
         try {
           const args = JSON.parse(call.function.arguments || "{}");
+          if (!toolAllowed(call.function.name, permissions)) {
+            result = {
+              denied: true,
+              error: `tool "${call.function.name}" is denied by the AI permission policy`,
+            };
+            transcript.push({
+              tool: call.function.name,
+              args: call.function.arguments,
+              result: JSON.stringify(result).slice(0, 2000),
+            });
+            messages.push({
+              role: "tool",
+              tool_call_id: call.id,
+              content: JSON.stringify(result).slice(0, 4000),
+            });
+            continue;
+          }
           switch (call.function.name) {
             case "list_files":
               result = { files: context.files };
@@ -368,6 +595,7 @@ async function runAgent(projectId, userId, task) {
                   error: String(err.message),
                 }));
               latestCompile.status = result2.status;
+              latestCompile.outputFiles = result2.outputFiles || null;
               result = { status: result2.status };
               break;
             }
@@ -379,6 +607,101 @@ async function runAgent(projectId, userId, task) {
                 logExcerpt: job[0]?.logExcerpt
                   ? String(job[0].logExcerpt).slice(-3000)
                   : "no compile log available",
+              };
+              break;
+            }
+            case "search_files": {
+              result = { matches: await searchFiles(projectId, args.query) };
+              break;
+            }
+            case "propose_delete_file": {
+              proposal = await createDeleteProposal(projectId, userId, args);
+              proposals.push(proposal);
+              result = {
+                ok: true,
+                proposalId: String(proposal._id),
+                note: "delete proposal created; the human must approve it",
+              };
+              break;
+            }
+            case "inspect_pdf": {
+              result =
+                latestCompile.outputFiles == null
+                  ? { error: "no compile has run in this session" }
+                  : {
+                      outputFiles: latestCompile.outputFiles.map((f) => ({
+                        path: f.path,
+                        size: f.size,
+                      })),
+                    };
+              break;
+            }
+            case "git_status": {
+              result = await getGitStatus(projectId);
+              break;
+            }
+            case "git_diff": {
+              const info = await getGitStatus(projectId);
+              result = info.enabled
+                ? {
+                    available: true,
+                    cloneUrl: info.cloneUrl,
+                    note: "run git diff in a clone; the platform delegates diffs to git",
+                  }
+                : {
+                    available: false,
+                    note:
+                      info.cloneUrl === null
+                        ? "git integration is not configured for this deployment"
+                        : "git integration is disabled",
+                  };
+              break;
+            }
+            case "create_snapshot": {
+              const ProjectReleasesManager = (
+                await import("../Releases/ProjectReleasesManager.mjs")
+              ).default;
+              const release =
+                await ProjectReleasesManager.promises.createRelease(projectId, {
+                  tag: args.tag,
+                  notes: args.notes || "created by AI agent",
+                  userId,
+                });
+              result = {
+                ok: true,
+                releaseId: String(release._id),
+                tag: release.tag,
+              };
+              break;
+            }
+            case "restore_snapshot": {
+              const HistoryManager = (
+                await import("../History/HistoryManager.mjs")
+              ).default;
+              const content = await HistoryManager.promises.getContentAtVersion(
+                projectId,
+                args.version,
+              );
+              const entry = (content.files || []).find(
+                (f) => f.path === String(args.path).replace(/^\/+/, ""),
+              );
+              if (entry == null) {
+                result = { error: "path not found at that version" };
+                break;
+              }
+              const text = Array.isArray(entry.content?.lines)
+                ? entry.content.lines.join("\n")
+                : String(entry.content ?? "");
+              proposal = await createProposal(projectId, userId, {
+                path: args.path,
+                content: text,
+                summary: `restore from version ${args.version}`,
+              });
+              proposals.push(proposal);
+              result = {
+                ok: true,
+                proposalId: String(proposal._id),
+                note: "restore proposal created; the human must approve it",
               };
               break;
             }

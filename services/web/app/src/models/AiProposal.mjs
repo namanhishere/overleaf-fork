@@ -12,7 +12,8 @@ const AiProposalSchema = new Schema(
     path: { type: String, required: true },
     // Snapshot of the previous content (null = file is new) for undo.
     previousLines: { type: [String], default: null },
-    newLines: { type: [String], required: true },
+    newLines: { type: [String], default: null },
+    action: { type: String, default: "write", enum: ["write", "delete"] },
     // pending | applied | rejected
     status: {
       type: String,
