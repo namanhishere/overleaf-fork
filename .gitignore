@@ -10,3 +10,4 @@ node_modules/
 .yarn/
 PLANS.md
 services/clsi/reports/
+develop/output/
