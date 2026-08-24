@@ -464,7 +464,28 @@ describe("AiAgentService", function () {
 
     it("skips bibliography.md without .bib files", async function (ctx) {
       const result = await ctx.service.promises.generateInitDoc("p1", "u1");
-      expect(result.files).to.deep.equal(["agents.md"]);
+      expect(result.files).to.deep.equal(["agents.md", "constraints.md"]);
+    });
+
+    it("always generates constraints.md", async function (ctx) {
+      ctx.ProjectGetter.promises.getProject.callsFake(async (pid, proj) => {
+        if (proj && proj.owner_ref != null) return { owner_ref: "u1" };
+        return {
+          rootFolder: [
+            {
+              docs: [{ _id: "d1", name: "main.tex" }],
+              folders: [],
+              fileRefs: [],
+            },
+          ],
+        };
+      });
+      const result = await ctx.service.promises.generateInitDoc("p1", "u1");
+      expect(result.files).to.include("constraints.md");
+      const call = ctx.EditorController.promises.upsertDocWithPath
+        .getCalls()
+        .find((c) => c.args[1] === "/constraints.md");
+      expect(call.args[2].join("\n")).to.contain("Do not invent citations");
     });
 
     it("extracts relevant files from the compile log", async function (ctx) {
