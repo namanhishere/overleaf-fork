@@ -102,7 +102,7 @@ async function init(req, res) {
     req.params.Project_id,
     _userId(req),
   );
-  res.json({ path: result.path });
+  res.json({ path: result.path, files: result.files });
 }
 
 export default {

@@ -427,6 +427,95 @@ describe("AiAgentService", function () {
     });
   });
 
+  describe("/init companion docs (PLANS 12)", function () {
+    it("generates bibliography.md when .bib files exist", async function (ctx) {
+      ctx.ProjectGetter.promises.getProject.callsFake(async (pid, proj) => {
+        if (proj && proj.owner_ref != null) return { owner_ref: "u1" };
+        return {
+          rootFolder: [
+            {
+              docs: [
+                { _id: "d1", name: "main.tex" },
+                { _id: "d2", name: "refs.bib" },
+              ],
+              folders: [],
+              fileRefs: [],
+            },
+          ],
+        };
+      });
+      ctx.ProjectEntityHandler.promises.getDoc.resolves({
+        lines: [
+          "\\documentclass{article}",
+          "\\bibliographystyle{ieee}",
+          "\\begin{document}text\\end{document}",
+        ],
+      });
+      const result = await ctx.service.promises.generateInitDoc("p1", "u1");
+      expect(result.files).to.include("bibliography.md");
+      expect(result.lines.join("\n")).to.contain("Citation style: ieee");
+      const upserts =
+        ctx.EditorController.promises.upsertDocWithPath.getCalls();
+      const paths = upserts.map((c) => c.args[1]);
+      expect(paths).to.include("/bibliography.md");
+      const bibCall = upserts.find((c) => c.args[1] === "/bibliography.md");
+      expect(bibCall.args[2].join("\n")).to.contain("Do not invent citations");
+    });
+
+    it("skips bibliography.md without .bib files", async function (ctx) {
+      const result = await ctx.service.promises.generateInitDoc("p1", "u1");
+      expect(result.files).to.deep.equal(["agents.md"]);
+    });
+
+    it("extracts relevant files from the compile log", async function (ctx) {
+      ctx.AiSettings.findOne.returns({
+        lean: () => ({
+          exec: async () => ({
+            enabled: true,
+            baseUrl: "http://ai.test",
+            apiKey: "k",
+            model: "m",
+            permissions: { readFiles: true, compile: true },
+          }),
+        }),
+      });
+      ctx.CompileManager.promises.compile.resolves({
+        status: "failed",
+        outputFiles: [],
+      });
+      ctx.CompileJobManager.promises.listForProject.resolves([
+        {
+          logExcerpt:
+            "./main.tex:12: Undefined control sequence. Also errors.tex:3",
+        },
+      ]);
+      ctx.fetchString.onFirstCall().resolves(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                tool_calls: [
+                  {
+                    id: "c5",
+                    function: { name: "compile_project", arguments: "{}" },
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+      );
+      ctx.fetchString
+        .onSecondCall()
+        .resolves(
+          JSON.stringify({ choices: [{ message: { content: "done" } }] }),
+        );
+      const result = await ctx.service.promises.runAgent("p1", "u1", "fix");
+      expect(result.compile.relevantFiles).to.include("main.tex");
+      expect(result.compile.relevantFiles).to.include("errors.tex");
+    });
+  });
+
   describe("agent failure presentation (PLANS 13)", function () {
     it("returns final compile status and log excerpt", async function (ctx) {
       ctx.AiSettings.findOne.returns({
@@ -460,13 +549,11 @@ describe("AiAgentService", function () {
           ],
         }),
       );
-      ctx.fetchString
-        .onSecondCall()
-        .resolves(
-          JSON.stringify({
-            choices: [{ message: { content: "still failing" } }],
-          }),
-        );
+      ctx.fetchString.onSecondCall().resolves(
+        JSON.stringify({
+          choices: [{ message: { content: "still failing" } }],
+        }),
+      );
       const result = await ctx.service.promises.runAgent("p1", "u1", "fix");
       expect(result.compile.status).to.equal("failed");
       expect(result.compile.logExcerpt).to.equal("ok");
