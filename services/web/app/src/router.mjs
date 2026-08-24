@@ -1324,6 +1324,16 @@ async function initialize(webRouter, privateApiRouter, publicApiRouter) {
     ReviewController.getGitInfo,
   );
   webRouter.post(
+    "/project/:Project_id/api/review/threads/:threadId/assign",
+    AuthorizationMiddleware.ensureUserCanWriteProjectContent,
+    ReviewController.assignThread,
+  );
+  webRouter.post(
+    "/project/:Project_id/api/review/threads/:threadId/unassign",
+    AuthorizationMiddleware.ensureUserCanWriteProjectContent,
+    ReviewController.unassignThread,
+  );
+  webRouter.post(
     "/project/:Project_id/api/review/summarize",
     AuthorizationMiddleware.ensureUserCanReadProject,
     ReviewController.summarizeComments,

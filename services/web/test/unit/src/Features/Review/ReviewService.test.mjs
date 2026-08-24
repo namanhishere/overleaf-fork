@@ -17,7 +17,11 @@ const THREADS = {
   },
   t2: {
     messages: [
-      { user_id: "u2", content: "Add methodology section", timestamp: "2026-01-05" },
+      {
+        user_id: "u2",
+        content: "@Bob please add a methodology section",
+        timestamp: "2026-01-05",
+      },
     ],
   },
 };
@@ -49,7 +53,7 @@ describe("ReviewService", function () {
     };
     ctx.UserGetter = {
       promises: {
-        getUsers: sinon.stub().callsFake(async ids => {
+        getUsers: sinon.stub().callsFake(async (ids) => {
           const known = {
             u1: { _id: "u1", email: "a@x.io", first_name: "Alice" },
             u2: { _id: "u2", email: "b@x.io", first_name: "Bob" },
@@ -57,7 +61,7 @@ describe("ReviewService", function () {
             "owner-1": { _id: "owner-1", email: "o@x.io", first_name: "Owner" },
           };
           return Array.isArray(ids)
-            ? ids.map(id => known[id]).filter(Boolean)
+            ? ids.map((id) => known[id]).filter(Boolean)
             : [known[ids]].filter(Boolean);
         }),
       },
@@ -71,18 +75,21 @@ describe("ReviewService", function () {
 
     vi.doMock(
       "../../../../../app/src/Features/Chat/ChatApiHandler.mjs",
-      () => ({ default: ctx.ChatApiHandler, ChatApiHandler: ctx.ChatApiHandler })
+      () => ({
+        default: ctx.ChatApiHandler,
+        ChatApiHandler: ctx.ChatApiHandler,
+      }),
     );
     vi.doMock(
       "../../../../../app/src/Features/Project/ProjectGetter.mjs",
-      () => ({ default: ctx.ProjectGetter, ProjectGetter: ctx.ProjectGetter })
+      () => ({ default: ctx.ProjectGetter, ProjectGetter: ctx.ProjectGetter }),
     );
     vi.doMock(
       "../../../../../app/src/Features/Collaborators/CollaboratorsGetter.mjs",
       () => ({
         default: ctx.CollaboratorsGetter,
         CollaboratorsGetter: ctx.CollaboratorsGetter,
-      })
+      }),
     );
     vi.doMock("../../../../../app/src/Features/User/UserGetter.mjs", () => ({
       default: ctx.UserGetter,
@@ -91,9 +98,34 @@ describe("ReviewService", function () {
     vi.doMock("../../../../../app/src/models/Project.mjs", () => ({
       Project: ctx.Project,
     }));
+    ctx.ReviewAssignmentDocs = [];
+    ctx.ReviewAssignment = {
+      updateOne: sinon.stub().callsFake(async (q, set) => {
+        const i = ctx.ReviewAssignmentDocs.findIndex(
+          (d) => d.threadId === q.threadId,
+        );
+        const doc = { ...q, ...set, save: () => {} };
+        if (i >= 0) ctx.ReviewAssignmentDocs[i] = doc;
+        else ctx.ReviewAssignmentDocs.push(doc);
+      }),
+      deleteOne: sinon.stub().callsFake(async (q) => {
+        ctx.ReviewAssignmentDocs = ctx.ReviewAssignmentDocs.filter(
+          (d) => d.threadId !== q.threadId,
+        );
+      }),
+      find: sinon
+        .stub()
+        .returns({ lean: async () => ctx.ReviewAssignmentDocs }),
+    };
+    vi.doMock("../../../../../app/src/models/ReviewAssignment.mjs", () => ({
+      ReviewAssignment: ctx.ReviewAssignment,
+    }));
     vi.doMock(
       "../../../../../app/src/Features/Audit/AuditLogManager.mjs",
-      () => ({ default: ctx.AuditLogManager, AuditLogManager: ctx.AuditLogManager })
+      () => ({
+        default: ctx.AuditLogManager,
+        AuditLogManager: ctx.AuditLogManager,
+      }),
     );
 
     ctx.service = (await import(modulePath)).default;
@@ -111,6 +143,19 @@ describe("ReviewService", function () {
       expect(status.resolved).to.equal(1);
       expect(status.summary).to.match(/1 unresolved comment/);
       expect(status.summary).to.contain("1 resolved");
+    });
+
+    it("detects @mentions of members and the owner", async function (ctx) {
+      const status = await ctx.service.promises.getReviewStatus("p1");
+      const withMention = status.threads.find(
+        (t) => (t.mentions || []).length > 0,
+      );
+      expect(withMention).to.exist;
+    });
+
+    it("returns assignments map", async function (ctx) {
+      const status = await ctx.service.promises.getReviewStatus("p1");
+      expect(status.assignments).to.deep.equal({});
     });
 
     it("sorts unresolved threads first", async function (ctx) {
@@ -150,6 +195,19 @@ describe("ReviewService", function () {
       expect(arg[1].$pull.reviewers).to.equal("u2");
       const audit = ctx.AuditLogManager.promises.recordAudit.lastCall.args[0];
       expect(audit.action).to.equal("reviewer-removed");
+    });
+  });
+  describe("thread assignment", function () {
+    it("assigns, persists and unassigns with audit", async function (ctx) {
+      await ctx.service.promises.assignThread("p1", "t2", "u2", "u1");
+      expect(ctx.ReviewAssignment.updateOne.called).to.be.true;
+      expect(ctx.AuditLogManager.promises.recordAudit.calledWithMatch).to.exist;
+      const status = await ctx.service.promises.getReviewStatus("p1");
+      expect(status.assignments.t2).to.equal("u2");
+      await ctx.service.promises.unassignThread("p1", "t2", "u1");
+      expect(ctx.ReviewAssignment.deleteOne.called).to.be.true;
+      const after = await ctx.service.promises.getReviewStatus("p1");
+      expect(after.assignments.t2).to.be.undefined;
     });
   });
 });

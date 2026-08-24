@@ -37,6 +37,60 @@ async function getReviewStatus(projectId) {
     return String(b.lastActivity).localeCompare(String(a.lastActivity));
   });
 
+  // Mentions (PLANS 9): detect @<member name> references in thread
+  // messages and map them to member ids.
+  let members = [];
+  try {
+    const memberIds =
+      await CollaboratorsGetter.promises.getMemberIds(projectId);
+    members = await UserGetter.promises.getUsers(memberIds || []);
+  } catch {
+    members = [];
+  }
+  const byFirstName = new Map();
+  const byFullName = new Map();
+  const index = (m) => {
+    if (m == null) return;
+    const name =
+      [m.first_name, m.last_name].filter(Boolean).join(" ") ||
+      m.name ||
+      m.email ||
+      "";
+    const parts = String(name).trim().split(/\s+/);
+    if (parts[0]) byFirstName.set(parts[0].toLowerCase(), m);
+    if (parts.length > 1) byFullName.set(parts.join(" ").toLowerCase(), m);
+  };
+  for (const m of members) index(m);
+  const project = await ProjectGetter.promises.getProject(projectId, {
+    owner_ref: 1,
+  });
+  if (project?.owner_ref) {
+    try {
+      const owners = await UserGetter.promises.getUsers([project.owner_ref]);
+      index(owners[0]);
+    } catch {
+      // owner lookup is best-effort for mentions
+    }
+  }
+
+  for (const e of entries) {
+    const thread = (threads || {})[e.threadId];
+    const mentioned = new Set();
+    for (const msg of thread.messages || []) {
+      const text = String(msg.content || "");
+      for (const match of text.matchAll(
+        /@([a-zA-Z][a-zA-Z.\-]*(?:\s+[A-Z][a-zA-Z.\-]*)?)/g,
+      )) {
+        const cand = match[1].toLowerCase();
+        const full = byFullName.get(cand);
+        const first = byFirstName.get(cand.split(/\s+/)[0]);
+        const hit = full || first;
+        if (hit) mentioned.add(String(hit._id || hit.id));
+      }
+    }
+    e.mentions = [...mentioned];
+  }
+
   const unresolved = entries.filter((e) => !e.resolved).length;
   const resolved = entries.length - unresolved;
   const summary =
@@ -45,8 +99,10 @@ async function getReviewStatus(projectId) {
       : `${unresolved} unresolved comment${unresolved === 1 ? "" : "s"} remain` +
         ` (${resolved} resolved, ${entries.length} total).`;
 
+  const assignments = await getAssignments(projectId);
   return {
     threads: entries,
+    assignments,
     total: entries.length,
     unresolved,
     resolved,
@@ -154,6 +210,53 @@ async function getOwnerId(projectId) {
   return project?.owner_ref;
 }
 
+// ---- thread assignment (PLANS 9 "Assign comments") ----
+
+async function assignThread(projectId, threadId, assigneeId, assignedBy) {
+  const { ReviewAssignment } =
+    await import("../../models/ReviewAssignment.mjs");
+  await ReviewAssignment.updateOne(
+    { projectId, threadId },
+    { assigneeId, assignedBy },
+    { upsert: true },
+  );
+  await AuditLogManager.promises.recordAudit({
+    actorId: assignedBy,
+    action: "review-comment-assigned",
+    targetType: "project",
+    targetId: String(projectId),
+    projectId,
+    info: { threadId, assigneeId: String(assigneeId) },
+  });
+  return { threadId, assigneeId: String(assigneeId) };
+}
+
+async function unassignThread(projectId, threadId, actorId) {
+  const { ReviewAssignment } =
+    await import("../../models/ReviewAssignment.mjs");
+  await ReviewAssignment.deleteOne({ projectId, threadId });
+  await AuditLogManager.promises.recordAudit({
+    actorId,
+    action: "review-comment-unassigned",
+    targetType: "project",
+    targetId: String(projectId),
+    projectId,
+    info: { threadId },
+  });
+  return { threadId, assigneeId: null };
+}
+
+async function getAssignments(projectId) {
+  const { ReviewAssignment } =
+    await import("../../models/ReviewAssignment.mjs");
+  const rows = await ReviewAssignment.find({ projectId }).lean();
+  const map = {};
+  for (const row of rows) {
+    map[row.threadId] = String(row.assigneeId);
+  }
+  return map;
+}
+
 export default {
   getReviewStatus,
   listProjectMembers,
@@ -166,5 +269,11 @@ export default {
     getReviewers,
     addReviewer,
     removeReviewer,
+    assignThread,
+    unassignThread,
+    getAssignments,
   },
+  assignThread,
+  unassignThread,
+  getAssignments,
 };

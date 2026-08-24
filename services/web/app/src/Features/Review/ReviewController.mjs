@@ -48,6 +48,33 @@ async function removeReviewer(req, res) {
   res.json({ reviewers });
 }
 
+// POST /project/:Project_id/api/review/threads/:threadId/assign
+async function assignThread(req, res) {
+  const ReviewService = (await import("./ReviewService.mjs")).default;
+  const { userId } = req.body || {};
+  if (!userId) {
+    return res.status(400).json({ error: "userId required" });
+  }
+  const result = await ReviewService.promises.assignThread(
+    req.params.Project_id,
+    req.params.threadId,
+    userId,
+    _userId(req),
+  );
+  res.json(result);
+}
+
+// POST /project/:Project_id/api/review/threads/:threadId/unassign
+async function unassignThread(req, res) {
+  const ReviewService = (await import("./ReviewService.mjs")).default;
+  const result = await ReviewService.promises.unassignThread(
+    req.params.Project_id,
+    req.params.threadId,
+    _userId(req),
+  );
+  res.json(result);
+}
+
 // GET /project/:Project_id/api/git — clone URL and integration status
 async function getGitInfo(req, res) {
   const { default: GitIntegrationService } =
@@ -106,5 +133,7 @@ export default {
   resolveThread: expressify(resolveThread),
   reopenThread: expressify(reopenThread),
   getGitInfo: expressify(getGitInfo),
+  assignThread: expressify(assignThread),
+  unassignThread: expressify(unassignThread),
   summarizeComments: expressify(summarizeComments),
 };

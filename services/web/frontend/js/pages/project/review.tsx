@@ -8,6 +8,7 @@ type Thread = {
   messageCount: number;
   firstMessage: string;
   lastActivity: string | null;
+  mentions: string[];
 };
 
 type Member = { _id: string; name: string; email: string | null };
@@ -15,6 +16,7 @@ type Reviewer = { _id: string; name: string; email: string | null };
 
 type ReviewData = {
   threads: Thread[];
+  assignments: Record<string, string>;
   total: number;
   unresolved: number;
   resolved: number;
@@ -77,6 +79,25 @@ function ProjectReview({ projectId }: { projectId: string }) {
       },
     );
     refresh();
+  }
+  async function setAssignee(threadId: string, assigneeId: string) {
+    setError(null);
+    try {
+      if (assigneeId) {
+        await postJSON(
+          `/project/${projectId}/api/review/threads/${threadId}/assign`,
+          { body: { userId: assigneeId } },
+        );
+      } else {
+        await postJSON(
+          `/project/${projectId}/api/review/threads/${threadId}/unassign`,
+          { body: {} },
+        );
+      }
+      refresh();
+    } catch (err) {
+      setError(String((err as Error).message));
+    }
   }
 
   async function addReviewer(e: React.FormEvent) {
@@ -150,10 +171,51 @@ function ProjectReview({ projectId }: { projectId: string }) {
                     key={t.threadId}
                     style={t.resolved ? { opacity: 0.6 } : {}}
                   >
-                    <td>{t.firstMessage}</td>
+                    <td>
+                      {t.firstMessage}
+                      {(t.mentions || []).length > 0 ? (
+                        <div style={{ fontSize: 11, color: "#0d6efd" }}>
+                          @
+                          {(t.mentions || [])
+                            .map(
+                              (id) =>
+                                (
+                                  data.members.find((m) => m._id === id) ||
+                                  data.reviewers.find((r) => r._id === id) || {
+                                    name: id,
+                                  }
+                                ).name,
+                            )
+                            .join(", @")}
+                        </div>
+                      ) : null}
+                    </td>
                     <td>{t.messageCount}</td>
                     <td>{t.resolved ? "Resolved" : "Unresolved"}</td>
                     <td>
+                      <select
+                        value={(data.assignments || {})[t.threadId] || ""}
+                        onChange={(e) =>
+                          setAssignee(t.threadId, e.target.value)
+                        }
+                        style={{ fontSize: 12, marginBottom: 4 }}
+                      >
+                        <option value="">Unassigned</option>
+                        {data.members.map((m) => (
+                          <option key={m._id} value={m._id}>
+                            {m.name}
+                          </option>
+                        ))}
+                        {data.reviewers
+                          .filter(
+                            (r) => !data.members.some((m) => m._id === r._id),
+                          )
+                          .map((r) => (
+                            <option key={r._id} value={r._id}>
+                              {r.name}
+                            </option>
+                          ))}
+                      </select>{" "}
                       <button
                         className="btn btn-xs btn-default"
                         onClick={() =>
