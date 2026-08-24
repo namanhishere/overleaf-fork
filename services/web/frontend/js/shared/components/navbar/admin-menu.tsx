@@ -50,6 +50,24 @@ export default function AdminMenu({
           <NavDropdownLinkItem href="/admin/workers">
             Workers
           </NavDropdownLinkItem>
+          <NavDropdownLinkItem href="/admin/storage">
+            Storage Health
+          </NavDropdownLinkItem>
+          <NavDropdownLinkItem href="/admin/profiles">
+            Compilation Profiles
+          </NavDropdownLinkItem>
+          <NavDropdownLinkItem href="/admin/observability">
+            Observability
+          </NavDropdownLinkItem>
+          <NavDropdownLinkItem href="/admin/audit">
+            Audit Log
+          </NavDropdownLinkItem>
+          <NavDropdownLinkItem href="/admin/ai">
+            AI Settings
+          </NavDropdownLinkItem>
+          <NavDropdownLinkItem href="/admin/sso">
+            SSO Providers
+          </NavDropdownLinkItem>
         </>
       ) : null}
       {canDisplayProjectUrlLookup ? (
