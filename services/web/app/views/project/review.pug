@@ -1,0 +1,10 @@
+extends ../layout-react
+
+block vars
+	- projectId = projectId
+
+block entrypointVar
+	- entrypoint = 'pages/project/review'
+
+block content
+	main#project-review-root.content.content-alt(data-project-id=projectId)

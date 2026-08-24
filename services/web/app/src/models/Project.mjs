@@ -41,6 +41,8 @@ export const ProjectSchema = new Schema(
     // Explicit compilation target: id of a configured worker from
     // Settings.apis.clsi.workers. Null means automatic placement.
     compileWorkerId: { type: String, default: null },
+    // Review workflow (PLANS 9): project members assigned as reviewers.
+    reviewers: [{ type: ObjectId, ref: 'User' }],
     spellCheckLanguage: { type: String, default: 'en' },
     deletedByExternalDataSource: { type: Boolean, default: false },
     description: { type: String, default: '' },

@@ -38,6 +38,7 @@ import MarkdownController from "./Features/Markdown/MarkdownController.mjs";
 import AiAgentController from "./Features/AiAgent/AiAgentController.mjs";
 import SecretsController from "./Features/Secrets/SecretsController.mjs";
 import ArtifactsController from "./Features/Artifacts/ArtifactsController.mjs";
+import ReviewController from "./Features/Review/ReviewController.mjs";
 import SsoController from "./Features/Authentication/SsoController.mjs";
 import HealthCheckController from "./Features/HealthCheck/HealthCheckController.mjs";
 import ProjectDownloadsController from "./Features/Downloads/ProjectDownloadsController.mjs";
@@ -1276,6 +1277,36 @@ async function initialize(webRouter, privateApiRouter, publicApiRouter) {
     AuthenticationController.requireLogin(),
     AuthorizationMiddleware.ensureUserCanWriteProjectContent,
     ArtifactsController.upload,
+  );
+  webRouter.get(
+    "/project/:Project_id/review",
+    AuthorizationMiddleware.ensureUserCanReadProject,
+    ReviewController.reviewPage,
+  );
+  webRouter.get(
+    "/project/:Project_id/api/review",
+    AuthorizationMiddleware.ensureUserCanReadProject,
+    ReviewController.getReviewStatus,
+  );
+  webRouter.post(
+    "/project/:Project_id/api/review/reviewers",
+    AuthorizationMiddleware.ensureUserCanWriteProjectContent,
+    ReviewController.addReviewer,
+  );
+  webRouter.delete(
+    "/project/:Project_id/api/review/reviewers/:reviewerId",
+    AuthorizationMiddleware.ensureUserCanWriteProjectContent,
+    ReviewController.removeReviewer,
+  );
+  webRouter.post(
+    "/project/:Project_id/api/review/threads/:threadId/resolve",
+    AuthorizationMiddleware.ensureUserCanWriteProjectContent,
+    ReviewController.resolveThread,
+  );
+  webRouter.post(
+    "/project/:Project_id/api/review/threads/:threadId/reopen",
+    AuthorizationMiddleware.ensureUserCanWriteProjectContent,
+    ReviewController.reopenThread,
   );
   webRouter.get(
     "/admin/ai",
