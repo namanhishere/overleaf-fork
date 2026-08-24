@@ -1,5 +1,6 @@
 import Crypto from "node:crypto";
 import Settings from "@overleaf/settings";
+import { checkCompileQuota } from "./CompileQuota.mjs";
 import RedisWrapper from "../../infrastructure/RedisWrapper.mjs";
 import ProjectGetter from "../Project/ProjectGetter.mjs";
 import ProjectRootDocManager from "../Project/ProjectRootDocManager.mjs";
@@ -102,9 +103,18 @@ async function compile(projectId, userId, options = {}) {
   // only pass userId down to clsi if this is a per-user compile
   const compileAsUser = Settings.disablePerUserCompiles ? undefined : userId;
 
-  // Managed job record: durable row + queue dispatch + concurrency slots.
-  // The jobId doubles as the unique slot token in Redis (sets dedupe, so
-  // each in-flight compile must hold a distinct member).
+  // Resource quota (PLANS 3): daily compile ceiling per user, with
+  // admin override.
+  const quotaCheck = await checkCompileQuota(userId);
+  if (!quotaCheck.ok) {
+    return {
+      status: "quota-exceeded",
+      outputFiles: [],
+      quota: quotaCheck.quota,
+      used: quotaCheck.used,
+    };
+  }
+
   const jobId = Crypto.randomUUID();
   try {
     await CompileJobManager.acquireAllSlots(userId, projectId, jobId);

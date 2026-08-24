@@ -231,6 +231,7 @@ const _CompileController = {
     }
     const {
       status,
+      quota,
       outputFiles,
       clsiServerId,
       limits,
@@ -255,6 +256,14 @@ const _CompileController = {
         .status(429)
         .set("Retry-After", "10")
         .json({ status, jobId, outputFiles: [] });
+    }
+    if (status === "quota-exceeded") {
+      return res.status(429).json({
+        status,
+        jobId,
+        outputFiles: [],
+        message: `Daily compile quota exceeded (${quota} compiles per day). Resets at midnight.`,
+      });
     }
     if (pdfDownloadDomain && outputUrlPrefix) {
       pdfDownloadDomain += outputUrlPrefix;

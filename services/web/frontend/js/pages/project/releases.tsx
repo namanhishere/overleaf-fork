@@ -37,6 +37,21 @@ function ReleasesDashboard() {
   const [notes, setNotes] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [diff, setDiff] = useState<{
+    tag: string;
+    files: Array<{
+      path: string;
+      status: string;
+      added: number;
+      removed: number;
+      hunks: Array<{
+        beforeStart: number;
+        beforeLines: string[];
+        afterStart: number;
+        afterLines: string[];
+      }>;
+    }>;
+  } | null>(null);
 
   async function refresh() {
     if (!projectId) return;
@@ -49,6 +64,17 @@ function ReleasesDashboard() {
       setReleases(rel.releases);
       setJobs(
         (jobData.jobs || []).filter((j) => j.status === "success" && j.buildId),
+      );
+    } catch (err) {
+      setError(String((err as Error).message));
+    }
+  }
+
+  async function showDiff(releaseId: string) {
+    setError(null);
+    try {
+      setDiff(
+        await getJSON(`/project/${projectId}/api/releases/${releaseId}/diff`),
       );
     } catch (err) {
       setError(String((err as Error).message));
@@ -149,6 +175,12 @@ function ReleasesDashboard() {
               </td>
               <td>{r.notes || "—"}</td>
               <td>
+                <button
+                  className="btn btn-xs btn-default"
+                  onClick={() => showDiff(r._id)}
+                >
+                  Diff vs current
+                </button>{" "}
                 <a
                   className="btn btn-xs btn-default"
                   href={`/project/${projectId}/build/${r.buildId}/output/output.zip`}
@@ -171,6 +203,44 @@ function ReleasesDashboard() {
           ) : null}
         </tbody>
       </table>
+
+      {diff ? (
+        <>
+          <h2>Diff: {diff.tag} vs current</h2>
+          {diff.files.length === 0 ? (
+            <p>No files in this release snapshot.</p>
+          ) : (
+            diff.files.map((f) => (
+              <div key={f.path} style={{ marginBottom: 16 }}>
+                <div>
+                  <code>{f.path}</code> — {f.status} (+{f.added}/-
+                  {f.removed})
+                </div>
+                {f.hunks.length > 0 ? (
+                  <pre
+                    style={{
+                      background: "#f6f6f6",
+                      padding: 8,
+                      fontSize: 12,
+                      maxHeight: 240,
+                      overflow: "auto",
+                      maxWidth: 760,
+                    }}
+                  >
+                    {f.hunks
+                      .map((h) => [
+                        ...h.beforeLines.map((l) => `- ${l}`),
+                        ...h.afterLines.map((l) => `+ ${l}`),
+                      ])
+                      .flat()
+                      .join("\n")}
+                  </pre>
+                ) : null}
+              </div>
+            ))
+          )}
+        </>
+      ) : null}
     </div>
   );
 }

@@ -15,6 +15,23 @@ async function listReleases(req, res) {
 }
 
 // POST /project/:Project_id/api/releases  { tag, notes?, buildId?, version? }
+// GET /project/:Project_id/api/releases/:releaseId/diff
+async function diffRelease(req, res) {
+  try {
+    const diff =
+      await ProjectReleasesManager.promises.diffReleaseAgainstCurrent(
+        req.params.Project_id,
+        req.params.releaseId,
+      );
+    res.json(diff);
+  } catch (err) {
+    if (err.statusCode === 404 || err.statusCode === 409) {
+      return res.status(err.statusCode).json({ error: err.message });
+    }
+    throw err;
+  }
+}
+
 async function createRelease(req, res) {
   const projectId = req.params.Project_id;
   const userId = SessionManager.getLoggedInUserId(req.session);
@@ -47,4 +64,5 @@ async function createRelease(req, res) {
 export default {
   listReleases: expressify(listReleases),
   createRelease: expressify(createRelease),
+  diffRelease: expressify(diffRelease),
 };

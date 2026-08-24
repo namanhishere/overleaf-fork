@@ -679,6 +679,11 @@ async function initialize(webRouter, privateApiRouter, publicApiRouter) {
     AuthorizationMiddleware.ensureUserCanAdminProject,
     ProjectReleasesController.createRelease,
   );
+  webRouter.get(
+    "/project/:Project_id/api/releases/:releaseId/diff",
+    AuthorizationMiddleware.ensureUserCanReadProject,
+    ProjectReleasesController.diffRelease,
+  );
 
   webRouter.get(
     "/project/:Project_id/output/cached/output.overleaf.json",
