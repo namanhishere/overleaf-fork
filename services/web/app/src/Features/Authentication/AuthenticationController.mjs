@@ -477,9 +477,12 @@ const AuthenticationController = {
   },
 
   requireGlobalLogin(req, res, next) {
+    const pathname = req._parsedUrl.pathname
     if (
-      AuthenticationController._globalLoginWhitelist.includes(
-        req._parsedUrl.pathname,
+      AuthenticationController._globalLoginWhitelist.some(
+        endpoint =>
+          endpoint === pathname ||
+          (endpoint instanceof RegExp && endpoint.test(pathname)),
       )
     ) {
       return next();

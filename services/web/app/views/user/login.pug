@@ -44,6 +44,11 @@ block content
 								span(data-ol-inflight='idle') #{translate("login")}
 								span(hidden data-ol-inflight='pending') #{translate("logging_in")}…
 							a.float-end(href='/user/password/reset') #{translate("forgot_your_password")}?
+						if ssoProviders && ssoProviders.length > 0
+							hr
+							each provider in ssoProviders
+								a.btn.btn-secondary.btn-block(href=`/sso/${provider.slug}/start` style='margin-bottom: 8px; display: block;')
+									| Log in with #{provider.name}
 						if login_support_text
 							hr
 							p.text-center !{login_support_text}

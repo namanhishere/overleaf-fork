@@ -33,6 +33,7 @@ import ProjectReleasesController from "./Features/Releases/ProjectReleasesContro
 import AdminCompilationProfilesController from "./Features/Admin/AdminCompilationProfilesController.mjs";
 import AdminWorkersController from "./Features/Admin/AdminWorkersController.mjs";
 import AdminStorageHealthController from "./Features/Admin/AdminStorageHealthController.mjs";
+import SsoController from "./Features/Authentication/SsoController.mjs";
 import HealthCheckController from "./Features/HealthCheck/HealthCheckController.mjs";
 import ProjectDownloadsController from "./Features/Downloads/ProjectDownloadsController.mjs";
 import FileStoreController from "./Features/FileStore/FileStoreController.mjs";
@@ -249,6 +250,36 @@ async function initialize(webRouter, privateApiRouter, publicApiRouter) {
 
   webRouter.get("/login", UserPagesController.loginPage);
   AuthenticationController.addEndpointToLoginWhitelist("/login");
+  AuthenticationController.addEndpointToLoginWhitelist(
+    /^\/sso\/[a-z0-9-]+\/(start|callback)$/,
+  );
+  webRouter.get("/sso/:slug/start", SsoController.start);
+  webRouter.get("/sso/:slug/callback", SsoController.callback);
+  webRouter.get(
+    "/admin/sso",
+    AuthorizationMiddleware.ensureUserIsSiteAdmin,
+    (req, res) => res.render("admin/sso"),
+  );
+  webRouter.get(
+    "/admin/api/sso",
+    AuthorizationMiddleware.ensureUserIsSiteAdmin,
+    SsoController.listProviders,
+  );
+  webRouter.post(
+    "/admin/api/sso",
+    AuthorizationMiddleware.ensureUserIsSiteAdmin,
+    SsoController.createProvider,
+  );
+  webRouter.patch(
+    "/admin/api/sso/:slug",
+    AuthorizationMiddleware.ensureUserIsSiteAdmin,
+    SsoController.updateProvider,
+  );
+  webRouter.delete(
+    "/admin/api/sso/:slug",
+    AuthorizationMiddleware.ensureUserIsSiteAdmin,
+    SsoController.deleteProvider,
+  );
 
   webRouter.post(
     "/login",

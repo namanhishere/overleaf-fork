@@ -4,6 +4,7 @@ import UserSessionsManager from './UserSessionsManager.mjs'
 import logger from '@overleaf/logger'
 import Settings from '@overleaf/settings'
 import AuthenticationController from '../Authentication/AuthenticationController.mjs'
+import SsoManager from '../Authentication/SsoManager.mjs'
 import SessionManager from '../Authentication/SessionManager.mjs'
 import SubscriptionLocator from '../Subscription/SubscriptionLocator.mjs'
 import _ from 'lodash'
@@ -259,7 +260,7 @@ const UserPagesController = {
     })
   },
 
-  loginPage(req, res) {
+  async loginPage(req, res) {
     // if user is being sent to /login with explicit redirect (redir=/foo),
     // such as being sent from the editor to /login, then set the redirect explicitly
     if (
@@ -272,11 +273,20 @@ const UserPagesController = {
     if (Object.keys(req.query).length !== 0) {
       metadata.robotsNoindexNofollow = true
     }
+    let ssoProviders = []
+    try {
+      ssoProviders = await SsoManager.promises.listProviders({
+        enabledOnly: true,
+      })
+    } catch {
+      ssoProviders = []
+    }
     res.render('user/login', {
       title: Settings.nav?.login_support_title || 'login',
       login_support_title: Settings.nav?.login_support_title,
       login_support_text: Settings.nav?.login_support_text,
       metadata,
+      ssoProviders,
     })
   },
 
