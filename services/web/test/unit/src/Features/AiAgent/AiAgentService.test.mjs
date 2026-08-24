@@ -18,7 +18,7 @@ describe("AiAgentService", function () {
     };
     ctx.AiProposalDocs = [];
     ctx.AiProposal = {
-      create: sinon.stub().callsFake(async doc => {
+      create: sinon.stub().callsFake(async (doc) => {
         // mimic mongoose: apply schema defaults
         const stored = {
           status: "pending",
@@ -34,7 +34,7 @@ describe("AiAgentService", function () {
           ...stored,
           toObject: () => ({ ...stored }),
           save: sinon.stub().callsFake(async function () {
-            Object.assign(doc2, stored)
+            Object.assign(doc2, stored);
           }),
         };
         ctx.AiProposalDocs.push(doc2);
@@ -100,20 +100,31 @@ describe("AiAgentService", function () {
     );
     vi.doMock(
       "../../../../../app/src/Features/Editor/EditorController.mjs",
-      () => ({ default: ctx.EditorController, EditorController: ctx.EditorController }),
+      () => ({
+        default: ctx.EditorController,
+        EditorController: ctx.EditorController,
+      }),
     );
     vi.doMock("../Audit/AuditLogManager.mjs", () => ({
       default: ctx.AuditLogManager,
     }));
     vi.doMock(
       "../../../../../app/src/Features/Audit/AuditLogManager.mjs",
-      () => ({ default: ctx.AuditLogManager, AuditLogManager: ctx.AuditLogManager }),
+      () => ({
+        default: ctx.AuditLogManager,
+        AuditLogManager: ctx.AuditLogManager,
+      }),
     );
-    vi.doMock("../../../../../app/src/Features/Compile/CompileManager.mjs", () => ({
-      default: ctx.CompileManager,
-      CompileManager: ctx.CompileManager,
+    vi.doMock(
+      "../../../../../app/src/Features/Compile/CompileManager.mjs",
+      () => ({
+        default: ctx.CompileManager,
+        CompileManager: ctx.CompileManager,
+      }),
+    );
+    vi.doMock("@overleaf/fetch-utils", () => ({
+      fetchString: ctx.fetchString,
     }));
-    vi.doMock("@overleaf/fetch-utils", () => ({ fetchString: ctx.fetchString }));
     ctx.ReviewService = {
       promises: {
         getReviewStatus: sinon.stub().resolves({
@@ -123,9 +134,12 @@ describe("AiAgentService", function () {
         }),
       },
     };
-    vi.doMock("../../../../../app/src/Features/Review/ReviewService.mjs", () => ({
-      default: ctx.ReviewService,
-    }));
+    vi.doMock(
+      "../../../../../app/src/Features/Review/ReviewService.mjs",
+      () => ({
+        default: ctx.ReviewService,
+      }),
+    );
 
     ctx.service = (await import(modulePath)).default;
   });
@@ -149,22 +163,21 @@ describe("AiAgentService", function () {
 
   describe("createProposal", function () {
     it("snapshots previous content for undo", async function (ctx) {
-      const proposal = await ctx.service.promises.createProposal(
-        "p1",
-        "u1",
-        { path: "main.tex", content: "\\section{New}", summary: "rewrite" },
-      );
+      const proposal = await ctx.service.promises.createProposal("p1", "u1", {
+        path: "main.tex",
+        content: "\\section{New}",
+        summary: "rewrite",
+      });
       expect(proposal.previousLines).to.deep.equal(["\\section{Hi}", "body"]);
       expect(proposal.newLines).to.deep.equal(["\\section{New}"]);
       expect(proposal.status).to.equal("pending");
     });
 
     it("normalizes bare paths with a leading slash", async function (ctx) {
-      const proposal = await ctx.service.promises.createProposal(
-        "p1",
-        "u1",
-        { path: "notes.md", content: "x" },
-      );
+      const proposal = await ctx.service.promises.createProposal("p1", "u1", {
+        path: "notes.md",
+        content: "x",
+      });
       expect(proposal.path).to.equal("/notes.md");
     });
 
@@ -180,19 +193,18 @@ describe("AiAgentService", function () {
 
   describe("applyProposal / rejectProposal", function () {
     it("applies a pending proposal through the editor and audits", async function (ctx) {
-      const proposal = await ctx.service.promises.createProposal(
-        "p1",
-        "u1",
-        { path: "main.tex", content: "new" },
-      );
+      const proposal = await ctx.service.promises.createProposal("p1", "u1", {
+        path: "main.tex",
+        content: "new",
+      });
       const doc = {
         ...proposal,
         toObject: () => ({ ...doc }),
         save: sinon.stub().callsFake(async function () {
-          doc.status = "applied"
-          doc.resolvedAt = new Date()
+          doc.status = "applied";
+          doc.resolvedAt = new Date();
         }),
-      }
+      };
       ctx.AiProposal.findOne.returns(doc);
       const applied = await ctx.service.promises.applyProposal(
         "p1",
@@ -266,9 +278,9 @@ describe("AiAgentService", function () {
       );
       expect(result.proposals).to.deep.equal([]);
       expect(result.iterations).to.equal(0);
-      expect(
-        result.transcript[result.transcript.length - 1].content,
-      ).to.equal("1 comment concerns the intro.");
+      expect(result.transcript[result.transcript.length - 1].content).to.equal(
+        "1 comment concerns the intro.",
+      );
       expect(ctx.ReviewService.promises.getReviewStatus.calledOnce).to.be.true;
     });
   });
