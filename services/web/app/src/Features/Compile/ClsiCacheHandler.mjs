@@ -1,23 +1,23 @@
-import _ from 'lodash'
+import _ from "lodash";
 import {
   fetchNothing,
   fetchRedirectWithResponse,
   RequestFailedError,
-} from '@overleaf/fetch-utils'
-import logger from '@overleaf/logger'
-import Settings from '@overleaf/settings'
-import OError from '@overleaf/o-error'
-import { NotFoundError, InvalidNameError } from '../Errors/Errors.js'
-import Features from '../../infrastructure/Features.mjs'
-import Path from 'node:path'
-import { zz } from '@overleaf/validation-tools'
+} from "@overleaf/fetch-utils";
+import logger from "@overleaf/logger";
+import Settings from "@overleaf/settings";
+import OError from "@overleaf/o-error";
+import { NotFoundError, InvalidNameError } from "../Errors/Errors.js";
+import Features from "../../infrastructure/Features.mjs";
+import Path from "node:path";
+import { zz } from "@overleaf/validation-tools";
 
-const TIMEOUT = 4_000
+const TIMEOUT = 4_000;
 
 /**
  * @type {Map<string, number>}
  */
-const lastFailures = new Map()
+const lastFailures = new Map();
 
 /**
  * Keep in sync with isAllowedFilename in services/clsi-cache/app/js/utils.js
@@ -28,18 +28,18 @@ const lastFailures = new Map()
 function isAllowedFilename(filename) {
   return (
     [
-      'output.blg',
-      'output.log',
-      'output.pdf',
-      'output.synctex.gz',
-      'output.overleaf.json',
-      'output.tar.gz',
+      "output.blg",
+      "output.log",
+      "output.pdf",
+      "output.synctex.gz",
+      "output.overleaf.json",
+      "output.tar.gz",
       // Not in web: 'history-resync.json.gz' is only read/written by clsi.
       // The user/frontend should not be able to download it directly.
       // We need to block access to it on the web layer.
       // If we ever remove blockRestrictedUserFromProject from the history endpoints, we can remove this restriction.
-    ].includes(filename) || filename.endsWith('.blg')
-  )
+    ].includes(filename) || filename.endsWith(".blg")
+  );
 }
 
 /**
@@ -48,11 +48,11 @@ function isAllowedFilename(filename) {
  * @param {string} filename
  */
 function validateFilename(filename) {
-  if (filename.split('/').includes('..')) {
-    throw new InvalidNameError('path traversal')
+  if (filename.split("/").includes("..")) {
+    throw new InvalidNameError("path traversal");
   }
   if (!isAllowedFilename(filename)) {
-    throw new InvalidNameError('bad filename')
+    throw new InvalidNameError("bad filename");
   }
 }
 
@@ -63,12 +63,12 @@ function validateFilename(filename) {
  * @return {string}
  */
 function getEgressLabel(fsPath) {
-  if (fsPath.endsWith('.blg')) {
+  if (fsPath.endsWith(".blg")) {
     // .blg files may have custom names and can be in nested folders.
-    return 'output.blg'
+    return "output.blg";
   }
   // The rest is limited to 5 file names via validateFilename: output.pdf, etc.
-  return fsPath
+  return fsPath;
 }
 
 /**
@@ -79,31 +79,31 @@ function getEgressLabel(fsPath) {
  * @return {Promise<void>}
  */
 async function clearCache(projectId, userId) {
-  if (!Features.hasFeature('saas')) return
+  if (!Features.hasFeature("saas")) return;
 
-  let path = `/project/${projectId}`
+  let path = `/project/${projectId}`;
   if (userId) {
-    path += `/user/${userId}`
+    path += `/user/${userId}`;
   }
-  path += '/output'
+  path += "/output";
 
   await Promise.all(
     Settings.apis.clsiCache.instances.map(async ({ url, shard }) => {
-      const u = new URL(url)
-      u.pathname = path
+      const u = new URL(url);
+      u.pathname = path;
       try {
         await fetchNothing(u, {
-          method: 'DELETE',
+          method: "DELETE",
           signal: AbortSignal.timeout(TIMEOUT),
-        })
+        });
       } catch (err) {
-        throw OError.tag(err, 'clear clsi-cache', { url, shard })
+        throw OError.tag(err, "clear clsi-cache", { url, shard });
       }
-    })
-  )
+    }),
+  );
 }
 
-const editorBuildIdSchema = zz.editorBuildId()
+const editorBuildIdSchema = zz.editorBuildId();
 
 /**
  * Get an output file from a specific build.
@@ -120,17 +120,17 @@ async function getOutputFile(
   userId,
   editorBuildId,
   filename,
-  signal = AbortSignal.timeout(TIMEOUT)
+  signal = AbortSignal.timeout(TIMEOUT),
 ) {
-  validateFilename(filename)
-  editorBuildId = editorBuildIdSchema.parse(editorBuildId)
+  validateFilename(filename);
+  editorBuildId = editorBuildIdSchema.parse(editorBuildId);
 
-  let path = `/project/${projectId}`
+  let path = `/project/${projectId}`;
   if (userId) {
-    path += `/user/${userId}`
+    path += `/user/${userId}`;
   }
-  path += `/build/${editorBuildId}/search/output/${filename}`
-  return getRedirectWithFallback(projectId, userId, path, signal)
+  path += `/build/${editorBuildId}/search/output/${filename}`;
+  return getRedirectWithFallback(projectId, userId, path, signal);
 }
 
 /**
@@ -146,16 +146,16 @@ async function getLatestOutputFile(
   projectId,
   userId,
   filename,
-  signal = AbortSignal.timeout(TIMEOUT)
+  signal = AbortSignal.timeout(TIMEOUT),
 ) {
-  validateFilename(filename)
+  validateFilename(filename);
 
-  let path = `/project/${projectId}`
+  let path = `/project/${projectId}`;
   if (userId) {
-    path += `/user/${userId}`
+    path += `/user/${userId}`;
   }
-  path += `/latest/output/${filename}`
-  return getRedirectWithFallback(projectId, userId, path, signal)
+  path += `/latest/output/${filename}`;
+  return getRedirectWithFallback(projectId, userId, path, signal);
 }
 
 /**
@@ -178,60 +178,60 @@ async function getRedirectWithFallback(
   projectId,
   userId,
   path,
-  signal = AbortSignal.timeout(TIMEOUT)
+  signal = AbortSignal.timeout(TIMEOUT),
 ) {
   // Avoid hitting the same instance first all the time.
-  const instances = _.shuffle(Settings.apis.clsiCache.instances)
+  const instances = _.shuffle(Settings.apis.clsiCache.instances);
   for (const { url, shard } of instances) {
     if (signal.aborted) {
-      break // Stop trying the next backend when the signal has expired.
+      break; // Stop trying the next backend when the signal has expired.
     }
-    const lastFailure = lastFailures.get(url) ?? 0
+    const lastFailure = lastFailures.get(url) ?? 0;
     if (lastFailure) {
       // Circuit breaker that avoids retries for 4-16s.
-      const retryDelay = TIMEOUT * (1 + 3 * Math.random())
+      const retryDelay = TIMEOUT * (1 + 3 * Math.random());
       if (performance.now() - lastFailure < retryDelay) {
-        continue
+        continue;
       }
     }
 
-    const u = new URL(url)
-    u.pathname = path
+    const u = new URL(url);
+    u.pathname = path;
     try {
       const {
         location,
         response: { headers },
       } = await fetchRedirectWithResponse(u, {
         signal,
-      })
-      lastFailures.delete(url) // The shard is back up.
-      let allFilesRaw = headers.get('X-All-Files')
-      if (!allFilesRaw.startsWith('[')) {
-        allFilesRaw = Buffer.from(allFilesRaw, 'base64url').toString()
+      });
+      lastFailures.delete(url); // The shard is back up.
+      let allFilesRaw = headers.get("X-All-Files");
+      if (!allFilesRaw.startsWith("[")) {
+        allFilesRaw = Buffer.from(allFilesRaw, "base64url").toString();
       }
       // Success, return the cache entry.
       return {
         location,
-        zone: headers.get('X-Zone'),
-        shard: headers.get('X-Shard') || 'cache',
-        lastModified: new Date(headers.get('X-Last-Modified')),
-        size: parseInt(headers.get('X-Content-Length'), 10),
+        zone: headers.get("X-Zone"),
+        shard: headers.get("X-Shard") || "cache",
+        lastModified: new Date(headers.get("X-Last-Modified")),
+        size: parseInt(headers.get("X-Content-Length"), 10),
         allFiles: JSON.parse(allFilesRaw),
-      }
+      };
     } catch (err) {
       if (err instanceof RequestFailedError && err.response.status === 404) {
-        lastFailures.delete(url) // The shard is back up.
-        break // No clsi-cache instance has cached something for this project/user.
+        lastFailures.delete(url); // The shard is back up.
+        break; // No clsi-cache instance has cached something for this project/user.
       }
-      lastFailures.set(url, performance.now()) // The shard is unhealthy. Refresh timestamp of last failure.
+      lastFailures.set(url, performance.now()); // The shard is unhealthy. Refresh timestamp of last failure.
       logger.warn(
         { err, projectId, userId, url, shard },
-        'getLatestOutputFile from clsi-cache failed'
-      )
+        "getLatestOutputFile from clsi-cache failed",
+      );
       // This clsi-cache instance is down, try the next backend.
     }
   }
-  throw new NotFoundError('nothing cached yet')
+  throw new NotFoundError("nothing cached yet");
 }
 
 /**
@@ -252,15 +252,15 @@ async function getRedirectWithFallback(
 async function prepareCacheSource(
   projectId,
   userId,
-  { sourceProjectId, templateVersionId, imageName, lastUpdated, shard, signal }
+  { sourceProjectId, templateVersionId, imageName, lastUpdated, shard, signal },
 ) {
   const url = new URL(
     `/project/${projectId}/user/${userId}/import-from`,
-    Settings.apis.clsiCache.instances.find(i => i.shard === shard).url
-  )
+    Settings.apis.clsiCache.instances.find((i) => i.shard === shard).url,
+  );
   try {
     await fetchNothing(url, {
-      method: 'POST',
+      method: "POST",
       json: {
         sourceProjectId,
         lastUpdated,
@@ -268,12 +268,12 @@ async function prepareCacheSource(
         imageName,
       },
       signal,
-    })
+    });
   } catch (err) {
     if (err instanceof RequestFailedError && err.response.status === 404) {
-      throw new NotFoundError()
+      throw new NotFoundError();
     }
-    throw err
+    throw err;
   }
 }
 
@@ -292,28 +292,29 @@ async function exportSubmissionAsTemplate(
   submissionId,
   editorBuildId,
   templateVersionId,
-  imageName
+  imageName,
 ) {
-  imageName = Path.basename(imageName)
+  imageName = Path.basename(imageName);
   const url = new URL(
     `/submission/${submissionId}/build/${editorBuildId}/export-as-template`,
-    Settings.apis.clsiCache.instances.find(i => i.shard === clsiCacheShard).url
-  )
+    Settings.apis.clsiCache.instances.find((i) => i.shard === clsiCacheShard)
+      .url,
+  );
   try {
     await fetchNothing(url, {
-      method: 'POST',
+      method: "POST",
       json: {
         templateVersionId,
         imageName,
       },
       // clsi-cache will poll up-to 15s for the output to be copied from clsi.
       signal: AbortSignal.timeout(30_000),
-    })
+    });
   } catch (err) {
     if (err instanceof RequestFailedError && err.response.status === 404) {
-      throw new NotFoundError()
+      throw new NotFoundError();
     }
-    throw err
+    throw err;
   }
 }
 
@@ -326,4 +327,4 @@ export default {
   getLatestOutputFile,
   prepareCacheSource,
   exportSubmissionAsTemplate,
-}
+};

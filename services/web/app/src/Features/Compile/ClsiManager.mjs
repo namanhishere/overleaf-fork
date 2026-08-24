@@ -192,7 +192,7 @@ async function sendRequestOnce(project, projectId, userId, options) {
       });
     }
   }
-  return await _sendBuiltRequest(projectId, userId, req, options);
+  return await _sendBuiltRequest(projectId, userId, req, options, project);
 }
 
 // for public API requests where there is no project id
@@ -285,7 +285,13 @@ async function deleteAuxFiles(projectId, userId, options, clsiserverid) {
   _throwIfRejected(clsiServerIdResult);
 }
 
-async function _sendBuiltRequest(projectId, userId, req, options) {
+async function _sendBuiltRequest(
+  projectId,
+  userId,
+  req,
+  options,
+  project = null,
+) {
   if (options.forceNewClsiServer) {
     await clearClsiServerId(projectId, userId, options.compileBackendClass);
   }
@@ -309,6 +315,7 @@ async function _sendBuiltRequest(projectId, userId, req, options) {
     req,
     options.compileBackendClass,
     options.compileGroup,
+    project,
   );
 
   const outputFiles = _parseOutputFiles(
@@ -624,8 +631,13 @@ async function _getCompilerUrl(
   projectId,
   userId,
   action,
+  project = null,
 ) {
-  const { baseUrl } = await WorkerRegistry.promises.resolveBaseUrl(projectId);
+  const { baseUrl } = await WorkerRegistry.promises.resolveBaseUrl(
+    projectId,
+    null,
+    project,
+  );
   const u = new URL(baseUrl || Settings.apis.clsi.url);
   u.pathname = `/project/${projectId}`;
   if (userId != null) {
@@ -645,6 +657,7 @@ async function _postToClsi(
   req,
   compileBackendClass,
   compileGroup,
+  project = null,
 ) {
   const url = await _getCompilerUrl(
     compileBackendClass,
@@ -652,6 +665,7 @@ async function _postToClsi(
     projectId,
     userId,
     "compile",
+    project,
   );
   const opts = {
     json: req,

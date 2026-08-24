@@ -1,30 +1,32 @@
-import { NotFoundError, ResourceGoneError } from '../Errors/Errors.js'
+import { NotFoundError, ResourceGoneError } from "../Errors/Errors.js";
 import {
   fetchStreamWithResponse,
   RequestFailedError,
-} from '@overleaf/fetch-utils'
-import Path from 'node:path'
-import { pipeline } from 'node:stream/promises'
-import logger from '@overleaf/logger'
-import ClsiCacheManager from './ClsiCacheManager.mjs'
-import CompileController from './CompileController.mjs'
-import { expressify } from '@overleaf/promise-utils'
-import ClsiCacheHandler from './ClsiCacheHandler.mjs'
-import ProjectGetter from '../Project/ProjectGetter.mjs'
-import { MeteredStream } from '@overleaf/stream-utils'
-import Metrics from '@overleaf/metrics'
-import { z, zz } from '@overleaf/validation-tools'
-import { parseReq } from '../../infrastructure/Validation.mjs'
+} from "@overleaf/fetch-utils";
+import Path from "node:path";
+import { pipeline } from "node:stream/promises";
+import logger from "@overleaf/logger";
+import ClsiCacheManager from "./ClsiCacheManager.mjs";
+import CompileController from "./CompileController.mjs";
+import { expressify } from "@overleaf/promise-utils";
+import ClsiCacheHandler from "./ClsiCacheHandler.mjs";
+import ProjectGetter from "../Project/ProjectGetter.mjs";
+import { MeteredStream } from "@overleaf/stream-utils";
+import Metrics from "@overleaf/metrics";
+import { z, zz } from "@overleaf/validation-tools";
+import { parseReq } from "../../infrastructure/Validation.mjs";
 
 const downloadFromCacheSchema = z.object({
   params: z.object({
     Project_id: zz.objectId(),
     editorBuildId: zz.editorBuildId(),
-    filename: zz.filepath().refine(s => ClsiCacheHandler.isAllowedFilename(s), {
-      message: 'path is not allowed',
-    }),
+    filename: zz
+      .filepath()
+      .refine((s) => ClsiCacheHandler.isAllowedFilename(s), {
+        message: "path is not allowed",
+      }),
   }),
-})
+});
 
 /**
  * Download a file from a specific build on the clsi-cache.
@@ -36,14 +38,14 @@ const downloadFromCacheSchema = z.object({
 async function downloadFromCache(req, res) {
   const {
     params: { Project_id: projectId, editorBuildId, filename },
-  } = parseReq(req, downloadFromCacheSchema)
+  } = parseReq(req, downloadFromCacheSchema);
   return await _downloadFromCacheWithParams(
     req,
     res,
     projectId,
     editorBuildId,
-    filename
-  )
+    filename,
+  );
 }
 
 /**
@@ -62,92 +64,93 @@ async function _downloadFromCacheWithParams(
   res,
   projectId,
   editorBuildId,
-  filename
+  filename,
 ) {
-  const userId = CompileController._getUserIdForCompile(req)
-  const ac = new AbortController()
-  let timer = setTimeout(() => ac.abort(), 10_000)
-  let location, projectName
+  const userId = CompileController._getUserIdForCompile(req);
+  const ac = new AbortController();
+  let timer = setTimeout(() => ac.abort(), 10_000);
+  let location, projectName;
   try {
-    ;[{ location }, { name: projectName }] = await Promise.all([
+    [{ location }, { name: projectName }] = await Promise.all([
       ClsiCacheHandler.getOutputFile(
         projectId,
         userId,
         editorBuildId,
         filename,
-        ac.signal
+        ac.signal,
       ),
       ProjectGetter.promises.getProject(projectId, { name: 1 }),
-    ])
+    ]);
   } catch (err) {
-    clearTimeout(timer)
+    clearTimeout(timer);
     if (err instanceof NotFoundError) {
       // res.sendStatus() sends a description of the status as body.
       // Using res.status().end() avoids sending that fake body.
-      return res.status(404).end()
+      return res.status(404).end();
     } else {
-      throw err
+      throw err;
     }
   }
 
-  let stream, response
+  let stream, response;
   try {
-    ;({ stream, response } = await fetchStreamWithResponse(location, {
+    ({ stream, response } = await fetchStreamWithResponse(location, {
       signal: ac.signal,
-    }))
+    }));
   } finally {
-    clearTimeout(timer)
+    clearTimeout(timer);
   }
   if (req.destroyed) {
     // The client has disconnected already, avoid trying to write into the broken connection.
-    stream.destroy(new Error('user aborted the request'))
-    return
+    stream.destroy(new Error("user aborted the request"));
+    return;
   }
 
-  for (const key of ['Content-Length', 'Content-Type']) {
-    if (response.headers.has(key)) res.setHeader(key, response.headers.get(key))
+  for (const key of ["Content-Length", "Content-Type"]) {
+    if (response.headers.has(key))
+      res.setHeader(key, response.headers.get(key));
   }
-  const ext = Path.extname(filename)
+  const ext = Path.extname(filename);
   res.attachment(
-    ext === '.pdf'
+    ext === ".pdf"
       ? `${CompileController._getSafeProjectName({ name: projectName })}.pdf`
-      : filename
-  )
+      : filename,
+  );
   // Downloads can take a while on a slow connection, increase timeouts to 10min
-  const TEN_MINUTES_IN_MS = 10 * 60 * 1000
-  res.setTimeout(TEN_MINUTES_IN_MS)
-  timer = setTimeout(() => ac.abort(), TEN_MINUTES_IN_MS)
+  const TEN_MINUTES_IN_MS = 10 * 60 * 1000;
+  res.setTimeout(TEN_MINUTES_IN_MS);
+  timer = setTimeout(() => ac.abort(), TEN_MINUTES_IN_MS);
 
   // Disable buffering in nginx
-  res.setHeader('X-Accel-Buffering', 'no')
+  res.setHeader("X-Accel-Buffering", "no");
 
   try {
-    res.writeHead(response.status)
+    res.writeHead(response.status);
     await pipeline(
       stream,
-      new MeteredStream(Metrics, 'clsi_cache_egress', {
+      new MeteredStream(Metrics, "clsi_cache_egress", {
         path: ClsiCacheHandler.getEgressLabel(filename),
       }),
-      res
-    )
+      res,
+    );
   } catch (err) {
-    const reqAborted = Boolean(req.destroyed)
-    const streamingStarted = Boolean(res.headersSent)
+    const reqAborted = Boolean(req.destroyed);
+    const streamingStarted = Boolean(res.headersSent);
     if (!streamingStarted) {
       if (err instanceof RequestFailedError) {
-        res.sendStatus(err.response.status)
+        res.sendStatus(err.response.status);
       } else {
-        res.sendStatus(500)
+        res.sendStatus(500);
       }
     }
     if (
       streamingStarted &&
       reqAborted &&
-      (err.code === 'ERR_STREAM_PREMATURE_CLOSE' ||
-        err.code === 'ERR_STREAM_UNABLE_TO_PIPE')
+      (err.code === "ERR_STREAM_PREMATURE_CLOSE" ||
+        err.code === "ERR_STREAM_UNABLE_TO_PIPE")
     ) {
       // Ignore noisy spurious error
-      return
+      return;
     }
     logger.warn(
       {
@@ -158,10 +161,10 @@ async function _downloadFromCacheWithParams(
         reqAborted,
         streamingStarted,
       },
-      'CLSI-cache proxy error'
-    )
+      "CLSI-cache proxy error",
+    );
   } finally {
-    clearTimeout(timer)
+    clearTimeout(timer);
   }
 }
 
@@ -173,8 +176,8 @@ async function _downloadFromCacheWithParams(
  * @return {Promise<void>}
  */
 async function getLatestBuildFromCache(req, res) {
-  const { Project_id: projectId } = req.params
-  const userId = CompileController._getUserIdForCompile(req)
+  const { Project_id: projectId } = req.params;
+  const userId = CompileController._getUserIdForCompile(req);
   try {
     const {
       zone,
@@ -185,14 +188,14 @@ async function getLatestBuildFromCache(req, res) {
       options,
       stats,
       timings,
-    } = await ClsiCacheManager.getLatestCompileResult(projectId, userId)
+    } = await ClsiCacheManager.getLatestCompileResult(projectId, userId);
 
     let { pdfCachingMinChunkSize, pdfDownloadDomain } =
-      await CompileController._getSplitTestOptions(req, res)
-    pdfDownloadDomain += `/zone/${zone}`
+      await CompileController._getSplitTestOptions(req, res);
+    pdfDownloadDomain += `/zone/${zone}`;
     res.json({
       fromCache: true,
-      status: 'success',
+      status: "success",
       outputFiles,
       compileGroup,
       clsiServerId,
@@ -202,14 +205,14 @@ async function getLatestBuildFromCache(req, res) {
       options,
       stats,
       timings,
-    })
+    });
   } catch (err) {
     if (err instanceof NotFoundError) {
-      res.sendStatus(404)
+      res.sendStatus(404);
     } else if (err instanceof ResourceGoneError) {
-      res.sendStatus(410)
+      res.sendStatus(410);
     } else {
-      throw err
+      throw err;
     }
   }
 }
@@ -218,4 +221,4 @@ export default {
   _downloadFromCacheWithParams,
   downloadFromCache: expressify(downloadFromCache),
   getLatestBuildFromCache: expressify(getLatestBuildFromCache),
-}
+};

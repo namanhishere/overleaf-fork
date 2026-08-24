@@ -1,22 +1,22 @@
-import { URL, URLSearchParams } from 'node:url'
-import OError from '@overleaf/o-error'
-import Settings from '@overleaf/settings'
+import { URL, URLSearchParams } from "node:url";
+import OError from "@overleaf/o-error";
+import Settings from "@overleaf/settings";
 import {
   fetchNothing,
   fetchStringWithResponse,
   RequestFailedError,
-} from '@overleaf/fetch-utils'
-import RedisWrapper from '../../infrastructure/RedisWrapper.mjs'
-import Cookie from 'cookie'
-import logger from '@overleaf/logger'
-import Metrics from '@overleaf/metrics'
+} from "@overleaf/fetch-utils";
+import RedisWrapper from "../../infrastructure/RedisWrapper.mjs";
+import Cookie from "cookie";
+import logger from "@overleaf/logger";
+import Metrics from "@overleaf/metrics";
 
-const clsiCookiesEnabled = (Settings.clsiCookie?.key ?? '') !== ''
+const clsiCookiesEnabled = (Settings.clsiCookie?.key ?? "") !== "";
 
-const rclient = RedisWrapper.client('clsi_cookie')
-let rclientSecondary
+const rclient = RedisWrapper.client("clsi_cookie");
+let rclientSecondary;
 if (Settings.redis.clsi_cookie_secondary != null) {
-  rclientSecondary = RedisWrapper.client('clsi_cookie_secondary')
+  rclientSecondary = RedisWrapper.client("clsi_cookie_secondary");
 }
 
 const ClsiCookieManagerFactory = function (backendGroup) {
@@ -28,42 +28,42 @@ const ClsiCookieManagerFactory = function (backendGroup) {
    */
   function buildKey(projectId, userId, compileBackendClass) {
     if (backendGroup != null) {
-      return `clsiserver:${backendGroup}:${compileBackendClass}:${projectId}:${userId}`
+      return `clsiserver:${backendGroup}:${compileBackendClass}:${projectId}:${userId}`;
     } else {
-      return `clsiserver:${compileBackendClass}:${projectId}:${userId}`
+      return `clsiserver:${compileBackendClass}:${projectId}:${userId}`;
     }
   }
 
   // TODO: remove this once the old keys have expired after the rollout of the
   // c3d->free / c4d->premium compile backend class rename.
   function buildOldKey(projectId, userId, compileBackendClass) {
-    let oldCompileBackendClass = compileBackendClass
-    if (compileBackendClass === 'free') {
-      oldCompileBackendClass = 'c3d'
-    } else if (compileBackendClass === 'premium') {
-      oldCompileBackendClass = 'c4d'
+    let oldCompileBackendClass = compileBackendClass;
+    if (compileBackendClass === "free") {
+      oldCompileBackendClass = "c3d";
+    } else if (compileBackendClass === "premium") {
+      oldCompileBackendClass = "c4d";
     }
-    return buildKey(projectId, userId, oldCompileBackendClass)
+    return buildKey(projectId, userId, oldCompileBackendClass);
   }
 
   async function getServerId(
     projectId,
     userId,
     compileGroup,
-    compileBackendClass
+    compileBackendClass,
   ) {
     if (!clsiCookiesEnabled) {
-      return
+      return;
     }
     let serverId = await rclient.get(
-      buildKey(projectId, userId, compileBackendClass)
-    )
+      buildKey(projectId, userId, compileBackendClass),
+    );
     if (!serverId) {
       // Fallback to the old key from before the c3d->free / c4d->premium rename.
       // TODO: remove this once the old keys have expired.
       serverId = await rclient.get(
-        buildOldKey(projectId, userId, compileBackendClass)
-      )
+        buildOldKey(projectId, userId, compileBackendClass),
+      );
     }
 
     if (!serverId) {
@@ -71,10 +71,10 @@ const ClsiCookieManagerFactory = function (backendGroup) {
         projectId,
         userId,
         compileGroup,
-        compileBackendClass
-      )
+        compileBackendClass,
+      );
     } else {
-      return serverId
+      return serverId;
     }
   }
 
@@ -82,30 +82,30 @@ const ClsiCookieManagerFactory = function (backendGroup) {
     projectId,
     userId,
     compileGroup,
-    compileBackendClass
+    compileBackendClass,
   ) {
-    const u = new URL(`${Settings.apis.clsi.url}/project/${projectId}/status`)
+    const u = new URL(`${Settings.apis.clsi.url}/project/${projectId}/status`);
     u.search = new URLSearchParams({
       compileGroup,
       compileBackendClass,
-    }).toString()
-    let res
+    }).toString();
+    let res;
     try {
       res = await fetchNothing(u.href, {
-        method: 'POST',
+        method: "POST",
         signal: AbortSignal.timeout(30_000),
-      })
+      });
     } catch (err) {
-      OError.tag(err, 'error getting initial server id for project', {
+      OError.tag(err, "error getting initial server id for project", {
         project_id: projectId,
-      })
-      throw err
+      });
+      throw err;
     }
 
     if (!clsiCookiesEnabled) {
-      return
+      return;
     }
-    const serverId = cookieManager._parseServerIdFromResponse(res)
+    const serverId = cookieManager._parseServerIdFromResponse(res);
     try {
       await cookieManager.promises.setServerId(
         projectId,
@@ -113,60 +113,60 @@ const ClsiCookieManagerFactory = function (backendGroup) {
         compileGroup,
         compileBackendClass,
         serverId,
-        null
-      )
-      return serverId
+        null,
+      );
+      return serverId;
     } catch (err) {
       logger.warn(
         { err, projectId },
-        'error setting server id via populate request'
-      )
-      throw err
+        "error setting server id via populate request",
+      );
+      throw err;
     }
   }
 
   function _parseServerIdFromResponse(response) {
-    const cookies = Cookie.parse(response.headers['set-cookie']?.[0] || '')
-    return cookies?.[Settings.clsiCookie.key]
+    const cookies = Cookie.parse(response.headers["set-cookie"]?.[0] || "");
+    return cookies?.[Settings.clsiCookie.key];
   }
 
   async function checkIsLoadSheddingEvent(
     clsiserverid,
     compileGroup,
-    compileBackendClass
+    compileBackendClass,
   ) {
-    let status
+    let status;
     try {
-      const url = new URL(Settings.apis.clsi.url)
-      url.pathname = '/instance-state'
+      const url = new URL(Settings.apis.clsi.url);
+      url.pathname = "/instance-state";
       url.search = new URLSearchParams({
         clsiserverid,
         compileGroup,
         compileBackendClass,
-      }).toString()
+      }).toString();
       const { response, body } = await fetchStringWithResponse(url.href, {
-        method: 'GET',
+        method: "GET",
         signal: AbortSignal.timeout(30_000),
-      })
+      });
       status =
         response.status === 200 && body === `${clsiserverid},UP\n`
-          ? 'load-shedding'
-          : 'cycle'
+          ? "load-shedding"
+          : "cycle";
     } catch (err) {
       if (err instanceof RequestFailedError && err.response.status === 404) {
-        status = 'cycle'
+        status = "cycle";
       } else {
-        status = 'error'
-        logger.warn({ err, clsiserverid }, 'cannot probe clsi VM')
+        status = "error";
+        logger.warn({ err, clsiserverid }, "cannot probe clsi VM");
       }
     }
-    Metrics.inc('clsi-lb-switch-backend', 1, { status })
+    Metrics.inc("clsi-lb-switch-backend", 1, { status });
   }
 
   function _getTTLInSeconds(clsiServerId) {
-    return (clsiServerId || '').includes('-reg-')
+    return (clsiServerId || "").includes("-reg-")
       ? Settings.clsiCookie.ttlInSecondsRegular
-      : Settings.clsiCookie.ttlInSeconds
+      : Settings.clsiCookie.ttlInSeconds;
   }
 
   async function setServerId(
@@ -175,27 +175,27 @@ const ClsiCookieManagerFactory = function (backendGroup) {
     compileGroup,
     compileBackendClass,
     serverId,
-    previous
+    previous,
   ) {
     if (!clsiCookiesEnabled) {
-      return
+      return;
     }
     if (serverId == null) {
       // We don't get a cookie back if it hasn't changed
       return await rclient.expire(
         buildKey(projectId, userId, compileBackendClass),
-        _getTTLInSeconds(previous)
-      )
+        _getTTLInSeconds(previous),
+      );
     }
     if (!previous) {
       // Initial assignment of a user+project or after clearing cache.
-      Metrics.inc('clsi-lb-assign-initial-backend')
+      Metrics.inc("clsi-lb-assign-initial-backend");
     } else {
       await checkIsLoadSheddingEvent(
         previous,
         compileGroup,
-        compileBackendClass
-      )
+        compileBackendClass,
+      );
     }
     if (rclientSecondary != null) {
       await _setServerIdInRedis(
@@ -203,16 +203,16 @@ const ClsiCookieManagerFactory = function (backendGroup) {
         projectId,
         userId,
         compileBackendClass,
-        serverId
-      ).catch(() => {})
+        serverId,
+      ).catch(() => {});
     }
     await _setServerIdInRedis(
       rclient,
       projectId,
       userId,
       compileBackendClass,
-      serverId
-    )
+      serverId,
+    );
   }
 
   async function _setServerIdInRedis(
@@ -220,31 +220,31 @@ const ClsiCookieManagerFactory = function (backendGroup) {
     projectId,
     userId,
     compileBackendClass,
-    serverId
+    serverId,
   ) {
     await rclient.setex(
       buildKey(projectId, userId, compileBackendClass),
       _getTTLInSeconds(serverId),
-      serverId
-    )
+      serverId,
+    );
   }
 
   async function clearServerId(projectId, userId, compileBackendClass) {
     if (!clsiCookiesEnabled) {
-      return
+      return;
     }
     try {
       await rclient.del(
         buildKey(projectId, userId, compileBackendClass),
-        buildOldKey(projectId, userId, compileBackendClass)
-      )
+        buildOldKey(projectId, userId, compileBackendClass),
+      );
     } catch (err) {
       // redis errors need wrapping as the instance may be shared
       throw new OError(
-        'Failed to clear clsi persistence',
+        "Failed to clear clsi persistence",
         { projectId, userId },
-        err
-      )
+        err,
+      );
     }
   }
 
@@ -256,9 +256,9 @@ const ClsiCookieManagerFactory = function (backendGroup) {
       _populateServerIdViaRequest,
       setServerId,
     },
-  }
+  };
 
-  return cookieManager
-}
+  return cookieManager;
+};
 
-export default ClsiCookieManagerFactory
+export default ClsiCookieManagerFactory;

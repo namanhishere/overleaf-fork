@@ -1,4 +1,5 @@
 import { expressify } from "@overleaf/promise-utils";
+import logger from "@overleaf/logger";
 import { CompileJob } from "../../models/CompileJob.mjs";
 import { User } from "../../models/User.mjs";
 import { AuditEntry } from "../../models/AuditEntry.mjs";
@@ -87,6 +88,26 @@ async function workerHealth() {
 // Prices are $ per 1M tokens, configurable via Settings.aiUsagePricing so
 // estimates track the deployed provider without rewriting history.
 async function aiUsageStats(since) {
+  try {
+    return await computeAiUsageStats(since);
+  } catch (err) {
+    // the dashboard must degrade gracefully when AI usage data is
+    // unavailable (no provider configured, DB unreachable, ...)
+    logger.warn({ err }, "ai usage stats unavailable");
+    return {
+      byPurpose: [],
+      totals: {
+        requests: 0,
+        promptTokens: 0,
+        completionTokens: 0,
+        estimatedCost: 0,
+      },
+      pricing: { prompt: 0.15, completion: 0.6 },
+    };
+  }
+}
+
+async function computeAiUsageStats(since) {
   const { AiUsage } = await import("../../models/AiUsage.mjs");
   const Settings = (await import("@overleaf/settings")).default;
   const pricing = Settings.aiUsagePricing || {

@@ -34,17 +34,20 @@ export function getWorker(workerId) {
   return configuredWorkers().find((w) => w.id === workerId) || null;
 }
 
-async function getPinnedWorkerId(projectId) {
+async function getPinnedWorkerId(projectId, project = null) {
   const cached = pinCache.get(projectId);
   if (cached && cached.expiresAt > Date.now()) {
     return cached.workerId;
   }
   let workerId = null;
   try {
-    const project = await ProjectGetter.promises.getProject(projectId, {
-      compileWorkerId: 1,
-    });
-    workerId = project?.compileWorkerId || null;
+    let doc = project;
+    if (doc == null) {
+      doc = await ProjectGetter.promises.getProject(projectId, {
+        compileWorkerId: 1,
+      });
+    }
+    workerId = doc?.compileWorkerId || null;
   } catch {
     workerId = null;
   }
@@ -68,8 +71,12 @@ export function invalidatePinCache(projectId) {
  * requests. Returns { baseUrl, workerId } where workerId is the pinned
  * worker actually used (null for automatic placement).
  */
-export async function resolveBaseUrl(projectId, lastHealthByWorker = null) {
-  const workerId = await getPinnedWorkerId(projectId);
+export async function resolveBaseUrl(
+  projectId,
+  lastHealthByWorker = null,
+  project = null,
+) {
+  const workerId = await getPinnedWorkerId(projectId, project);
   if (workerId != null) {
     const worker = getWorker(workerId);
     if (worker != null) {

@@ -1,5 +1,5 @@
-import { zz } from '@overleaf/validation-tools'
-import Settings from '@overleaf/settings'
+import { zz } from "@overleaf/validation-tools";
+import Settings from "@overleaf/settings";
 
 // Build zod schema once and use it below.
 const schema = {
@@ -9,7 +9,7 @@ const schema = {
   optionalUserId: zz.objectId().optional(),
   buildId: zz.buildId(),
   filepath: zz.filepath(),
-}
+};
 
 /**
  * @param {string} projectIdOrSubmissionId
@@ -24,20 +24,20 @@ export function getOutputZipURL(
   userId,
   buildId,
   compileBackendClass,
-  clsiServerId
+  clsiServerId,
 ) {
-  compileBackendClass = schema.compileBackendClass.parse(compileBackendClass)
-  clsiServerId = schema.optionalClsiServerId.parse(clsiServerId)
-  const url = new URL(Settings.apis.clsi.url)
+  compileBackendClass = schema.compileBackendClass.parse(compileBackendClass);
+  clsiServerId = schema.optionalClsiServerId.parse(clsiServerId);
+  const url = new URL(Settings.apis.clsi.url);
   url.pathname = getFilePath(
     projectIdOrSubmissionId,
     userId,
     buildId,
-    'output.zip'
-  )
-  url.searchParams.set('compileBackendClass', compileBackendClass)
-  if (clsiServerId) url.searchParams.set('clsiserverid', clsiServerId)
-  return url
+    "output.zip",
+  );
+  url.searchParams.set("compileBackendClass", compileBackendClass);
+  if (clsiServerId) url.searchParams.set("clsiserverid", clsiServerId);
+  return url;
 }
 
 /**
@@ -53,13 +53,13 @@ export function getOutputFileURL(
   userId,
   buildId,
   file,
-  clsiServerId
+  clsiServerId,
 ) {
-  clsiServerId = schema.optionalClsiServerId.parse(clsiServerId)
-  const url = new URL(Settings.apis.clsi.downloadHost)
-  url.pathname = getFilePath(projectIdOrSubmissionId, userId, buildId, file)
-  if (clsiServerId) url.searchParams.set('clsiserverid', clsiServerId)
-  return url
+  clsiServerId = schema.optionalClsiServerId.parse(clsiServerId);
+  const url = new URL(Settings.apis.clsi.downloadHost);
+  url.pathname = getFilePath(projectIdOrSubmissionId, userId, buildId, file);
+  if (clsiServerId) url.searchParams.set("clsiserverid", clsiServerId);
+  return url;
 }
 
 /**
@@ -71,15 +71,15 @@ export function getOutputFileURL(
  */
 export function getFilePath(projectIdOrSubmissionId, userId, buildId, file) {
   projectIdOrSubmissionId = schema.projectIdOrSubmissionId.parse(
-    projectIdOrSubmissionId.toString()
-  )
-  userId = schema.optionalUserId.parse(userId?.toString())
-  buildId = schema.buildId.parse(buildId)
-  file = schema.filepath.parse(file)
-  let path = `/project/${projectIdOrSubmissionId}`
+    projectIdOrSubmissionId.toString(),
+  );
+  userId = schema.optionalUserId.parse(userId?.toString());
+  buildId = schema.buildId.parse(buildId);
+  file = schema.filepath.parse(file);
+  let path = `/project/${projectIdOrSubmissionId}`;
   if (userId) {
-    path += `/user/${userId}`
+    path += `/user/${userId}`;
   }
-  path += `/build/${buildId}/output/${file}`
-  return path
+  path += `/build/${buildId}/output/${file}`;
+  return path;
 }

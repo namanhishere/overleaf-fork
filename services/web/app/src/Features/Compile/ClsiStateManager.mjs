@@ -8,8 +8,8 @@
  * DS207: Consider shorter variations of null checks
  * Full docs: https://github.com/decaffeinate/decaffeinate/blob/master/docs/suggestions.md
  */
-import crypto from 'node:crypto'
-import ProjectEntityHandler from '../Project/ProjectEntityHandler.mjs'
+import crypto from "node:crypto";
+import ProjectEntityHandler from "../Project/ProjectEntityHandler.mjs";
 
 // The "state" of a project is a hash of the relevant attributes in the
 // project object in this case we only need the rootFolder.
@@ -25,40 +25,40 @@ import ProjectEntityHandler from '../Project/ProjectEntityHandler.mjs'
 // The docupdater is responsible for setting the key in redis, and
 // unsetting it if it removes any documents from the doc updater.
 
-const buildState = s =>
-  crypto.createHash('sha1').update(s, 'utf8').digest('hex')
+const buildState = (s) =>
+  crypto.createHash("sha1").update(s, "utf8").digest("hex");
 
 export default {
   computeHash(project, options) {
     const { docs, files } =
-      ProjectEntityHandler.getAllEntitiesFromProject(project)
+      ProjectEntityHandler.getAllEntitiesFromProject(project);
     const fileList = Array.from(files || []).map(
-      f => `${f.file._id}:${f.file.rev}:${f.file.created}:${f.path}`
-    )
-    const docList = Array.from(docs || []).map(d => `${d.doc._id}:${d.path}`)
+      (f) => `${f.file._id}:${f.file.rev}:${f.file.created}:${f.path}`,
+    );
+    const docList = Array.from(docs || []).map((d) => `${d.doc._id}:${d.path}`);
     const sortedEntityList = [
       ...Array.from(docList),
       ...Array.from(fileList),
-    ].sort()
+    ].sort();
     // ignore the isAutoCompile options as it doesn't affect the
     // output, but include all other options e.g. draft
     const optionsList = (() => {
-      const result = []
-      const object = options || {}
+      const result = [];
+      const object = options || {};
       for (const key in object) {
-        const value = object[key]
-        if (!['isAutoCompile', 'buildId'].includes(key)) {
-          result.push(`option ${key}:${value}`)
+        const value = object[key];
+        if (!["isAutoCompile", "buildId"].includes(key)) {
+          result.push(`option ${key}:${value}`);
         }
       }
-      return result
-    })()
-    const sortedOptionsList = optionsList.sort()
+      return result;
+    })();
+    const sortedOptionsList = optionsList.sort();
     const hash = buildState(
       [...Array.from(sortedEntityList), ...Array.from(sortedOptionsList)].join(
-        '\n'
-      )
-    )
-    return hash
+        "\n",
+      ),
+    );
+    return hash;
   },
-}
+};

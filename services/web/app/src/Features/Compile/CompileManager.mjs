@@ -9,6 +9,7 @@ import ClsiManager from "./ClsiManager.mjs";
 import CompileJobManager from "./CompileJobManager.mjs";
 import WorkerRegistry from "./WorkerRegistry.mjs";
 import Metrics from "@overleaf/metrics";
+import logger from "@overleaf/logger";
 import { RateLimiter } from "../../infrastructure/RateLimiter.mjs";
 import { callbackify, callbackifyMultiResult } from "@overleaf/promise-utils";
 import Errors from "../Errors/Errors.js";
@@ -104,9 +105,15 @@ async function compile(projectId, userId, options = {}) {
   const compileAsUser = Settings.disablePerUserCompiles ? undefined : userId;
 
   // Resource quota (PLANS 3): daily compile ceiling per user, with
-  // admin override.
-  const quotaCheck = await checkCompileQuota(userId);
-  if (!quotaCheck.ok) {
+  // admin override. Fail-open: a broken quota check must never block
+  // compiles.
+  let quotaCheck = { ok: true };
+  try {
+    quotaCheck = await checkCompileQuota(userId);
+  } catch (err) {
+    logger.warn({ err }, "compile quota check failed; allowing compile");
+  }
+  if (quotaCheck.ok === false) {
     return {
       status: "quota-exceeded",
       outputFiles: [],

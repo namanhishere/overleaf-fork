@@ -1,11 +1,17 @@
 import Settings from "@overleaf/settings";
-import { User } from "../../models/User.mjs";
-import { CompileJob } from "../../models/CompileJob.mjs";
 
 // Daily compile quota per user (PLANS 3 "Resource quotas"). Admins
 // bypass the check (admin override). Limit configurable via
 // Settings.compileQuotaPerUserPerDay.
+//
+// Models are loaded lazily so that importing this module (via
+// CompileManager) never pulls Mongoose into contexts that stub the
+// models - e.g. upstream unit tests.
 export async function checkCompileQuota(userId) {
+  const [{ User }, { CompileJob }] = await Promise.all([
+    import("../../models/User.mjs"),
+    import("../../models/CompileJob.mjs"),
+  ]);
   const quota = Settings.compileQuotaPerUserPerDay || 200;
   const user = await User.findOne({ _id: userId }, { isAdmin: 1 }).lean();
   if (user?.isAdmin === true) {
