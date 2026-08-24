@@ -1231,6 +1231,11 @@ async function initialize(webRouter, privateApiRouter, publicApiRouter) {
     AiAgentController.applyProposal,
   );
   webRouter.post(
+    "/project/:Project_id/api/ai/proposals/:proposalId/undo",
+    AuthorizationMiddleware.ensureUserCanWriteProjectContent,
+    AiAgentController.undoProposal,
+  );
+  webRouter.post(
     "/project/:Project_id/api/ai/proposals/:proposalId/reject",
     AuthorizationMiddleware.ensureUserCanWriteProjectContent,
     AiAgentController.rejectProposal,

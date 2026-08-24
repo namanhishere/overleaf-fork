@@ -56,17 +56,32 @@ async function listProposals(req, res) {
   res.json({
     proposals: proposals.map((p) => ({
       ...p,
-      diff: AiAgentService.simpleDiff(p.previousLines, p.newLines),
+      diff:
+        p.hunks && p.hunks.length > 0
+          ? AiAgentService.hunkDiff(p.hunks, p.previousLines)
+          : AiAgentService.simpleDiff(p.previousLines, p.newLines),
     })),
   });
 }
 
+// POST /project/:Project_id/api/ai/proposals/:proposalId/undo
+async function undoProposal(req, res) {
+  const proposal = await AiAgentService.promises.undoProposal(
+    req.params.Project_id,
+    _userId(req),
+    req.params.proposalId,
+  );
+  res.json({ proposal });
+}
+
 // POST /project/:Project_id/api/ai/proposals/:proposalId/apply
 async function applyProposal(req, res) {
+  const hunks = req.body && req.body.hunks;
   const proposal = await AiAgentService.promises.applyProposal(
     req.params.Project_id,
     _userId(req),
     req.params.proposalId,
+    { hunks: Array.isArray(hunks) ? hunks.map(Number) : undefined },
   );
   res.json({ proposal });
 }
@@ -96,6 +111,7 @@ export default {
   runAgent: expressify(runAgent),
   listProposals: expressify(listProposals),
   applyProposal: expressify(applyProposal),
+  undoProposal: expressify(undoProposal),
   rejectProposal: expressify(rejectProposal),
   init: expressify(init),
 };

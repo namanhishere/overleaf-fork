@@ -2,12 +2,20 @@ import { createRoot } from "react-dom/client";
 import { useEffect, useState } from "react";
 import { getJSON, postJSON } from "@/infrastructure/fetch-json";
 
+type ProposalHunk = {
+  beforeStart: number;
+  beforeLines: string[];
+  afterStart: number;
+  afterLines: string[];
+};
+
 type Proposal = {
   _id: string;
   path: string;
   status: string;
   summary: string;
   diff: string[];
+  hunks?: ProposalHunk[];
 };
 
 function ProjectAi({ projectId }: { projectId: string }) {
@@ -19,11 +27,15 @@ function ProjectAi({ projectId }: { projectId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [message, setMessage] = useState<string | null>(null);
+  const [selectedHunks, setSelectedHunks] = useState<Record<string, number[]>>(
+    {},
+  );
+  const [showResolved, setShowResolved] = useState(false);
 
   async function refreshProposals() {
     try {
       const data = await getJSON<{ proposals: Proposal[] }>(
-        `/project/${projectId}/api/ai/proposals`,
+        `/project/${projectId}/api/ai/proposals${showResolved ? "?all=true" : ""}`,
       );
       setProposals(data.proposals);
     } catch {
@@ -34,7 +46,7 @@ function ProjectAi({ projectId }: { projectId: string }) {
   useEffect(() => {
     refreshProposals();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId]);
+  }, [projectId, showResolved]);
 
   async function run(e: React.FormEvent) {
     e.preventDefault();
@@ -60,14 +72,44 @@ function ProjectAi({ projectId }: { projectId: string }) {
     setError(null);
     setMessage(null);
     try {
+      const sel = selectedHunks[id];
       await postJSON(`/project/${projectId}/api/ai/proposals/${id}/${action}`, {
-        body: {},
+        body: action === "apply" && sel && sel.length > 0 ? { hunks: sel } : {},
       });
-      setMessage(action === "apply" ? "Change applied." : "Change rejected.");
+      setMessage(
+        action === "apply"
+          ? sel && sel.length > 0
+            ? "Selected changes applied."
+            : "Change applied."
+          : "Change rejected.",
+      );
+      setSelectedHunks({ ...selectedHunks, [id]: undefined });
       refreshProposals();
     } catch (err) {
       setError(String((err as Error).message));
     }
+  }
+
+  async function undo(id: string) {
+    setError(null);
+    setMessage(null);
+    try {
+      await postJSON(`/project/${projectId}/api/ai/proposals/${id}/undo`, {
+        body: {},
+      });
+      setMessage("Change undone.");
+      refreshProposals();
+    } catch (err) {
+      setError(String((err as Error).message));
+    }
+  }
+
+  function toggleHunk(id: string, idx: number, checked: boolean) {
+    const cur = selectedHunks[id] || [];
+    setSelectedHunks({
+      ...selectedHunks,
+      [id]: checked ? [...cur, idx] : cur.filter((x: number) => x !== idx),
+    });
   }
 
   async function runInit() {
@@ -148,6 +190,16 @@ function ProjectAi({ projectId }: { projectId: string }) {
       ) : null}
 
       <h2>Pending proposals</h2>
+      <p>
+        <label style={{ fontSize: 12 }}>
+          <input
+            type="checkbox"
+            checked={showResolved}
+            onChange={(e) => setShowResolved(e.target.checked)}
+          />{" "}
+          Show applied/rejected (undo available for applied)
+        </label>
+      </p>
       {proposals.length === 0 ? (
         <p>No pending proposals.</p>
       ) : (
@@ -175,6 +227,24 @@ function ProjectAi({ projectId }: { projectId: string }) {
             >
               {p.diff.join("\n")}
             </pre>
+            {p.hunks && p.hunks.length > 1 ? (
+              <div style={{ margin: "8px 0" }}>
+                <strong style={{ fontSize: 12 }}>Partial accept:</strong>
+                {p.hunks.map((h, idx) => (
+                  <label key={idx} style={{ display: "block", fontSize: 12 }}>
+                    <input
+                      type="checkbox"
+                      checked={(selectedHunks[p._id] || []).includes(idx)}
+                      onChange={(e) => toggleHunk(p._id, idx, e.target.checked)}
+                    />{" "}
+                    hunk {idx + 1}:{" "}
+                    {h.afterLines.length > 0
+                      ? `+${h.afterLines.length} line(s)`
+                      : `-${h.beforeLines.length} line(s)`}
+                  </label>
+                ))}
+              </div>
+            ) : null}
             <button
               className="btn btn-xs btn-primary"
               onClick={() => resolve(p._id, "apply")}
@@ -187,6 +257,22 @@ function ProjectAi({ projectId }: { projectId: string }) {
             >
               Reject
             </button>
+            {p.status === "applied" ? (
+              <span>
+                {" "}
+                <button
+                  className="btn btn-xs btn-warning"
+                  onClick={() => undo(p._id)}
+                >
+                  Undo
+                </button>
+              </span>
+            ) : null}
+            {p.status !== "pending" ? (
+              <div style={{ fontSize: 11, marginTop: 4 }}>
+                status: {p.status}
+              </div>
+            ) : null}
           </div>
         ))
       )}

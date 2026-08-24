@@ -32,15 +32,21 @@ describe("AiAgentService", function () {
         };
         const doc2 = {
           ...stored,
-          toObject: () => ({ ...stored }),
-          save: sinon.stub().callsFake(async function () {
-            Object.assign(doc2, stored);
-          }),
+          toObject: () => ({ ...doc2 }),
+          save: sinon.stub().resolves(),
         };
         ctx.AiProposalDocs.push(doc2);
         return doc2;
       }),
-      findOne: sinon.stub(),
+      findOne: sinon.stub().callsFake(async (query) => {
+        const doc = ctx.AiProposalDocs.find(
+          (d) =>
+            String(d._id) === String(query._id) &&
+            String(d.projectId) === String(query.projectId) &&
+            (query.status == null || d.status === query.status),
+        );
+        return doc || null;
+      }),
       find: sinon
         .stub()
         .returns({ sort: () => ({ limit: () => ({ lean: async () => [] }) }) }),
@@ -262,6 +268,98 @@ describe("AiAgentService", function () {
       expect(result.path).to.equal("agents.md");
       expect(result.lines.join("\n")).to.contain("main.tex");
       expect(result.lines.join("\n")).to.contain("notes.md");
+    });
+  });
+
+  describe("hunk diff and partial accept (PLANS 11)", function () {
+    it("computes replacement hunks with an LCS diff", async function (ctx) {
+      const hunks = ctx.service.computeHunks ? ctx.service.computeHunks : null;
+      // computeHunks is internal; exercise via createProposal + listProposals
+      ctx.ProjectEntityHandler.promises.getDoc.resolves({
+        lines: ["line1", "line2", "line3"],
+      });
+      const proposal = await ctx.service.promises.createProposal("p1", "u1", {
+        path: "main.tex",
+        content: "line1\nCHANGED\nline3\nline4",
+        summary: "test",
+      });
+      expect(proposal.hunks).to.have.length(2);
+      expect(proposal.hunks[0].beforeLines).to.deep.equal(["line2"]);
+      expect(proposal.hunks[0].afterLines).to.deep.equal(["CHANGED"]);
+      expect(proposal.hunks[1].afterLines).to.deep.equal(["line4"]);
+    });
+
+    it("partial accept merges only selected hunks", async function (ctx) {
+      ctx.ProjectEntityHandler.promises.getDoc.resolves({
+        lines: ["a", "b", "c"],
+      });
+      const proposal = await ctx.service.promises.createProposal("p1", "u1", {
+        path: "main.tex",
+        content: "a\nB1\nc\nD2",
+        summary: "two hunks",
+      });
+      expect(proposal.hunks.length).to.equal(2);
+      // accept only the first hunk (B1), reject the second (D2)
+      const applied = await ctx.service.promises.applyProposal(
+        "p1",
+        "u1",
+        proposal._id,
+        { hunks: [0] },
+      );
+      expect(applied.appliedHunks).to.deep.equal([0]);
+      const upsert =
+        ctx.EditorController.promises.upsertDocWithPath.lastCall.args;
+      expect(upsert[1]).to.equal("/main.tex");
+      expect(upsert[2]).to.deep.equal(["a", "B1", "c"]);
+    });
+
+    it("undo restores previous lines and audits", async function (ctx) {
+      ctx.ProjectEntityHandler.promises.getDoc.resolves({
+        lines: ["x1"],
+      });
+      const proposal = await ctx.service.promises.createProposal("p1", "u1", {
+        path: "main.tex",
+        content: "x2",
+        summary: "undo me",
+      });
+      await ctx.service.promises.applyProposal("p1", "u1", proposal._id);
+      // doc currently equals newLines
+      ctx.ProjectEntityHandler.promises.getDoc.resolves({
+        lines: ["x2"],
+      });
+      const undone = await ctx.service.promises.undoProposal(
+        "p1",
+        "u1",
+        proposal._id,
+      );
+      expect(undone.status).to.equal("undone");
+      const upsert =
+        ctx.EditorController.promises.upsertDocWithPath.lastCall.args;
+      expect(upsert[2]).to.deep.equal(["x1"]);
+    });
+
+    it("undo refuses when the document changed after apply", async function (ctx) {
+      ctx.ProjectEntityHandler.promises.getDoc.resolves({
+        lines: ["x1"],
+      });
+      const proposal = await ctx.service.promises.createProposal("p1", "u1", {
+        path: "main.tex",
+        content: "x2",
+        summary: "undo refused",
+      });
+      await ctx.service.promises.applyProposal("p1", "u1", proposal._id);
+      // human edited afterwards
+      ctx.ProjectEntityHandler.promises.getDoc.resolves({
+        lines: ["human edit"],
+      });
+      let err = null;
+      try {
+        await ctx.service.promises.undoProposal("p1", "u1", proposal._id);
+      } catch (e) {
+        err = e;
+      }
+      expect(err).to.exist;
+      expect(err.message).to.include("undo refused");
     });
   });
 

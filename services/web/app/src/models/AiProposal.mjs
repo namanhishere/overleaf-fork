@@ -14,10 +14,25 @@ const AiProposalSchema = new Schema(
     previousLines: { type: [String], default: null },
     newLines: { type: [String], default: null },
     action: { type: String, default: "write", enum: ["write", "delete"] },
+    // Hunk-level diff (PLANS 11 partial accept). Each hunk replaces
+    // previousLines[beforeStart..beforeStart+beforeLines.length] with
+    // afterLines.
+    hunks: {
+      type: [
+        {
+          beforeStart: { type: Number, required: true },
+          beforeLines: { type: [String], default: [] },
+          afterStart: { type: Number, required: true },
+          afterLines: { type: [String], default: [] },
+        },
+      ],
+      default: undefined,
+    },
+    appliedHunks: { type: [Number], default: null },
     // pending | applied | rejected
     status: {
       type: String,
-      enum: ["pending", "applied", "rejected"],
+      enum: ["pending", "applied", "rejected", "undone"],
       default: "pending",
     },
     summary: { type: String, default: "" },

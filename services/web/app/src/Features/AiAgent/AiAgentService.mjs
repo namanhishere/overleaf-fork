@@ -225,6 +225,88 @@ async function getProjectContext(projectId) {
 
 // ---- proposals ----
 
+// LCS-based line diff producing replacement hunks (PLANS 11): each hunk
+// replaces previousLines[beforeStart .. beforeStart+beforeLines.length)
+// with afterLines. Unchanged lines between hunks are implied.
+function computeHunks(previousLines, newLines) {
+  const a = previousLines || [];
+  const b = newLines || [];
+  // LCS table (capped to keep proposals cheap on huge files)
+  const MAX = 2000;
+  const A = a.slice(0, MAX);
+  const B = b.slice(0, MAX);
+  const m = A.length;
+  const n = B.length;
+  const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+  for (let i = m - 1; i >= 0; i--) {
+    for (let j = n - 1; j >= 0; j--) {
+      dp[i][j] =
+        A[i] === B[j]
+          ? dp[i + 1][j + 1] + 1
+          : Math.max(dp[i + 1][j], dp[i][j + 1]);
+    }
+  }
+  // walk to get matched pairs
+  const ops = []; // {type: 'same'|'del'|'add', aIdx, bIdx}
+  let i = 0;
+  let j = 0;
+  while (i < m && j < n) {
+    if (A[i] === B[j]) {
+      ops.push({ type: "same", aIdx: i, bIdx: j });
+      i++;
+      j++;
+    } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+      ops.push({ type: "del", aIdx: i });
+      i++;
+    } else {
+      ops.push({ type: "add", bIdx: j });
+      j++;
+    }
+  }
+  while (i < m) ops.push({ type: "del", aIdx: i++ });
+  while (j < n) ops.push({ type: "add", bIdx: j++ });
+  // group consecutive del/add runs into hunks
+  const hunks = [];
+  let k = 0;
+  while (k < ops.length) {
+    if (ops[k].type === "same") {
+      k++;
+      continue;
+    }
+    const beforeLines = [];
+    const afterLines = [];
+    const beforeStart = ops[k].aIdx ?? a.length;
+    const afterStart = ops[k].bIdx ?? b.length;
+    while (k < ops.length && ops[k].type !== "same") {
+      if (ops[k].type === "del") beforeLines.push(A[ops[k].aIdx]);
+      else afterLines.push(B[ops[k].bIdx]);
+      k++;
+    }
+    hunks.push({ beforeStart, beforeLines, afterStart, afterLines });
+  }
+  return hunks;
+}
+
+function renderDiff(hunks, previousLines, newLines) {
+  const a = previousLines || [];
+  const b = newLines || [];
+  const out = [];
+  let pi = 0;
+  for (const h of hunks) {
+    while (pi < h.beforeStart && pi < a.length) out.push(`  ${a[pi++]}`);
+    for (const l of h.beforeLines) out.push(`- ${l}`);
+    for (const l of h.afterLines) out.push(`+ ${l}`);
+    pi = h.beforeStart + h.beforeLines.length;
+  }
+  while (pi < a.length) out.push(`  ${a[pi++]}`);
+  return out;
+}
+
+// Render a unified-ish diff from stored hunks
+function hunkDiff(hunks, previousLines) {
+  return renderDiff(hunks || [], previousLines, []);
+}
+
 function simpleDiff(previousLines, newLines) {
   const before = previousLines || [];
   const out = [];
@@ -250,29 +332,67 @@ async function createProposal(projectId, userId, { path, content, summary }) {
     throw new OError("invalid target path", { path });
   }
   const previousLines = await readDocLines(projectId, path);
+  const newLines = String(content).split("\n");
+  const hunks = computeHunks(previousLines, newLines);
   const proposal = await AiProposal.create({
     projectId,
     userId,
     path,
     previousLines,
-    newLines: String(content).split("\n"),
+    newLines,
+    hunks,
     action: "write",
     summary: String(summary || "").slice(0, 500),
   });
   return proposal.toObject();
 }
 
-async function applyProposal(projectId, userId, proposalId) {
+// Rebuild the resulting content when only a subset of hunks is accepted
+// (PLANS 11 partial accept): rejected hunks keep their previous lines.
+function contentForHunks(proposal, acceptedIndices) {
+  const a = proposal.previousLines || [];
+  const hunks = proposal.hunks || [];
+  const accepted = new Set(acceptedIndices);
+  const out = [];
+  let pi = 0;
+  hunks.forEach((h, idx) => {
+    while (pi < h.beforeStart && pi < a.length) out.push(a[pi++]);
+    if (accepted.has(idx)) out.push(...h.afterLines);
+    else out.push(...h.beforeLines);
+    pi = h.beforeStart + h.beforeLines.length;
+  });
+  while (pi < a.length) out.push(a[pi++]);
+  return out;
+}
+
+async function applyProposal(projectId, userId, proposalId, { hunks } = {}) {
   const proposal = await AiProposal.findOne({
     _id: proposalId,
     projectId,
     status: "pending",
   });
   if (proposal == null) throw new OError("proposal not found or not pending");
+  const partial =
+    Array.isArray(hunks) &&
+    hunks.length > 0 &&
+    hunks.length < (proposal.hunks || []).length;
+  if (hunks != null && !partial && (proposal.hunks || []).length > 0) {
+    // full selection supplied
+  }
+  const acceptedHunks = partial ? hunks : null;
   if (proposal.action === "delete") {
     await EditorController.promises.deleteEntityWithPath(
       projectId,
       proposal.path,
+      "ai-agent",
+      userId,
+    );
+  } else if (partial) {
+    const merged = contentForHunks(proposal, hunks);
+    await EditorController.promises.upsertDocWithPath(
+      projectId,
+      proposal.path,
+      merged,
       "ai-agent",
       userId,
     );
@@ -286,6 +406,7 @@ async function applyProposal(projectId, userId, proposalId) {
     );
   }
   proposal.status = "applied";
+  proposal.appliedHunks = acceptedHunks;
   proposal.resolvedAt = new Date();
   await proposal.save();
   await AuditLogManager.promises.recordAudit({
@@ -294,7 +415,57 @@ async function applyProposal(projectId, userId, proposalId) {
     targetType: "project",
     targetId: String(projectId),
     projectId,
-    info: { after: { path: proposal.path, proposalId: String(proposal._id) } },
+    info: {
+      after: { path: proposal.path, proposalId: String(proposal._id) },
+      partial,
+      acceptedHunks: acceptedHunks || "all",
+    },
+  });
+  return proposal.toObject();
+}
+
+// Undo an applied write proposal (PLANS 11): restores previousLines.
+// Refuses when the document has been modified since the apply, so a
+// later human/AI edit is never clobbered.
+async function undoProposal(projectId, userId, proposalId) {
+  const proposal = await AiProposal.findOne({
+    _id: proposalId,
+    projectId,
+    status: "applied",
+  });
+  if (proposal == null) throw new OError("proposal not found or not applied");
+  if (proposal.action === "delete") {
+    throw new OError(
+      "delete proposals cannot be undone; restore the file from history",
+    );
+  }
+  const current = await readDocLines(projectId, proposal.path);
+  const expected =
+    proposal.appliedHunks != null
+      ? contentForHunks(proposal, proposal.appliedHunks)
+      : proposal.newLines;
+  if (JSON.stringify(current) !== JSON.stringify(expected)) {
+    throw new OError("document changed since apply; undo refused", {
+      path: proposal.path,
+    });
+  }
+  await EditorController.promises.upsertDocWithPath(
+    projectId,
+    proposal.path,
+    proposal.previousLines || [],
+    "ai-agent",
+    userId,
+  );
+  proposal.status = "undone";
+  proposal.resolvedAt = new Date();
+  await proposal.save();
+  await AuditLogManager.promises.recordAudit({
+    actorId: userId,
+    action: "ai-edit-undone",
+    targetType: "project",
+    targetId: String(projectId),
+    projectId,
+    info: { path: proposal.path, proposalId: String(proposal._id) },
   });
   return proposal.toObject();
 }
@@ -839,11 +1010,13 @@ export default {
   runAgent,
   createProposal,
   applyProposal,
+  undoProposal,
   rejectProposal,
   listProposals,
   generateInitDoc,
   getProjectContext,
   simpleDiff,
+  hunkDiff,
   promises: {
     summarizeComments,
     getSettings,
@@ -851,10 +1024,12 @@ export default {
     runAgent,
     createProposal,
     applyProposal,
+    undoProposal,
     rejectProposal,
     listProposals,
     generateInitDoc,
     getProjectContext,
     simpleDiff,
+    hunkDiff,
   },
 };
