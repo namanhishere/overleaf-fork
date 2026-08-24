@@ -53,6 +53,37 @@ async function killJob(req, res) {
   res.json({ ok: true });
 }
 
+// POST /admin/jobs/:jobId/retry — re-run a failed/timeout/cancelled
+// compile through the normal compile path (PLANS 3 "Retry"). A fresh job
+// is created; the original record is never mutated.
+async function retryJob(req, res) {
+  const job = await CompileJobManager.get(req.params.jobId);
+  if (!job) {
+    return res.status(404).json({ error: "job not found" });
+  }
+  if (!["failed", "timeout", "cancelled"].includes(job.status)) {
+    return res.status(409).json({ error: `cannot retry a ${job.status} job` });
+  }
+  const result = await CompileManager.promises.compile(
+    String(job.projectId),
+    job.userId ? String(job.userId) : undefined,
+  );
+  await AuditLogManager.promises.recordAudit({
+    actorId: SessionManager.getLoggedInUserId(req.session),
+    action: "admin-retry-job",
+    targetType: "job",
+    targetId: String(job.jobId),
+    projectId: job.projectId,
+    info: {
+      before: { status: job.status },
+      result: result.status,
+      userId: job.userId,
+    },
+    ipAddress: req.ip,
+  });
+  res.json({ ok: true, result: result.status });
+}
+
 // GET /admin/jobs/:jobId/log
 async function getJobLog(req, res) {
   const job = await CompileJobManager.get(req.params.jobId);
@@ -71,5 +102,6 @@ async function getJobLog(req, res) {
 export default {
   listJobs: expressify(listJobs),
   killJob: expressify(killJob),
+  retryJob: expressify(retryJob),
   getJobLog: expressify(getJobLog),
 };

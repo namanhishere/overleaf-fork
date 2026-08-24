@@ -73,6 +73,12 @@ export default {
       RateLimiterMiddleware.rateLimit(rateLimiters.adminUsersWrite),
       AdminJobsController.killJob,
     );
+    webRouter.post(
+      "/admin/api/jobs/:jobId/retry",
+      ...requireSiteAdmin,
+      RateLimiterMiddleware.rateLimit(rateLimiters.adminUsersWrite),
+      AdminJobsController.retryJob,
+    );
     webRouter.get(
       "/admin/api/jobs/:jobId/log",
       ...requireSiteAdmin,

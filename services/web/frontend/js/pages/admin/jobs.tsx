@@ -29,6 +29,8 @@ function formatBytes(bytes?: number) {
 
 function JobsDashboard() {
   const [jobs, setJobs] = useState<CompileJob[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
   const [logText, setLogText] = useState<string | null>(null);
 
   async function refresh() {
@@ -58,6 +60,18 @@ function JobsDashboard() {
     refresh();
   }
 
+  async function retry(jobId: string) {
+    setError(null);
+    setMessage(null);
+    try {
+      const res = await postJSON(`/admin/api/jobs/${jobId}/retry`);
+      setMessage(`Retry started (${res.result}).`);
+      refresh();
+    } catch (err) {
+      setError(String((err as Error).message));
+    }
+  }
+
   async function showLog(jobId: string) {
     const data = await getJSON<{ logExcerpt: string | null }>(
       `/admin/api/jobs/${jobId}/log`,
@@ -67,6 +81,8 @@ function JobsDashboard() {
 
   return (
     <div>
+      {error ? <p className="text-danger">{error}</p> : null}
+      {message ? <p className="text-success">{message}</p> : null}
       <h1>Compile jobs</h1>
       <p>
         <a href="/admin">Back to admin</a> · <a href="/admin/users">Users</a> ·{" "}
@@ -121,6 +137,14 @@ function JobsDashboard() {
                     onClick={() => kill(job.jobId)}
                   >
                     Kill
+                  </button>
+                ) : null}
+                {["failed", "timeout", "cancelled"].includes(job.status) ? (
+                  <button
+                    className="btn btn-xs btn-warning"
+                    onClick={() => retry(job.jobId)}
+                  >
+                    Retry
                   </button>
                 ) : null}{" "}
                 <button
