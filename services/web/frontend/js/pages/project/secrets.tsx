@@ -1,68 +1,68 @@
-import { createRoot } from 'react-dom/client'
-import { useEffect, useState } from 'react'
-import { getJSON, postJSON } from '@/infrastructure/fetch-json'
+import { createRoot } from "react-dom/client";
+import { useEffect, useState } from "react";
+import { getJSON, postJSON } from "@/infrastructure/fetch-json";
 
 type SecretMeta = {
-  key: string
-  createdAt: string
-  updatedAt: string
-}
+  key: string;
+  createdAt: string;
+  updatedAt: string;
+};
 
 function ProjectSecrets({ projectId }: { projectId: string }) {
-  const [secrets, setSecrets] = useState<SecretMeta[]>([])
-  const [key, setKey] = useState('')
-  const [value, setValue] = useState('')
-  const [message, setMessage] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [secrets, setSecrets] = useState<SecretMeta[]>([]);
+  const [key, setKey] = useState("");
+  const [value, setValue] = useState("");
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   async function refresh() {
-    setError(null)
+    setError(null);
     try {
       const data = await getJSON<{ secrets: SecretMeta[] }>(
-        `/project/${projectId}/api/secrets`
-      )
-      setSecrets(data.secrets)
+        `/project/${projectId}/api/secrets`,
+      );
+      setSecrets(data.secrets);
     } catch (err) {
-      setError(String((err as Error).message))
+      setError(String((err as Error).message));
     }
   }
 
   useEffect(() => {
-    refresh()
+    refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId])
+  }, [projectId]);
 
   async function save(e: React.FormEvent) {
-    e.preventDefault()
-    setError(null)
-    setMessage(null)
+    e.preventDefault();
+    setError(null);
+    setMessage(null);
     try {
       await postJSON(`/project/${projectId}/api/secrets`, {
         body: { key, value },
-      })
-      setMessage(`Secret ${key.toUpperCase()} saved (write-only).`)
-      setKey('')
-      setValue('')
-      refresh()
+      });
+      setMessage(`Secret ${key.toUpperCase()} saved (write-only).`);
+      setKey("");
+      setValue("");
+      refresh();
     } catch (err) {
-      setError(String((err as Error).message))
+      setError(String((err as Error).message));
     }
   }
 
   async function remove(key: string) {
-    setError(null)
-    setMessage(null)
+    setError(null);
+    setMessage(null);
     try {
       const res = await fetch(`/project/${projectId}/api/secrets/${key}`, {
-        method: 'DELETE',
-      })
+        method: "DELETE",
+      });
       if (!res.ok && res.status !== 204) {
-        throw new Error(`Delete failed (${res.status})`)
+        throw new Error(`Delete failed (${res.status})`);
       }
-      setMessage(`Secret ${key} deleted.`)
-      refresh()
+      setMessage(`Secret ${key} deleted.`);
+      refresh();
     } catch (err) {
-      setError(String((err as Error).message))
+      setError(String((err as Error).message));
     }
   }
 
@@ -70,7 +70,7 @@ function ProjectSecrets({ projectId }: { projectId: string }) {
     <div className="container">
       <h1>Project secrets</h1>
       <p>
-        <a href={`/project/${projectId}`}>Back to project</a> ·{' '}
+        <a href={`/project/${projectId}`}>Back to project</a> ·{" "}
         <a href={`/project/${projectId}/ai`}>AI assistant</a>
       </p>
       <p>
@@ -87,16 +87,16 @@ function ProjectSecrets({ projectId }: { projectId: string }) {
           value={key}
           placeholder="NAME (e.g. ZENODO_TOKEN)"
           required
-          onChange={e => setKey(e.target.value.toUpperCase())}
-        />{' '}
+          onChange={(e) => setKey(e.target.value.toUpperCase())}
+        />{" "}
         <input
           type="password"
           value={value}
           placeholder="Value"
           required
           size={36}
-          onChange={e => setValue(e.target.value)}
-        />{' '}
+          onChange={(e) => setValue(e.target.value)}
+        />{" "}
         <button type="submit" className="btn btn-primary">
           Save
         </button>
@@ -112,7 +112,7 @@ function ProjectSecrets({ projectId }: { projectId: string }) {
           </tr>
         </thead>
         <tbody>
-          {secrets.map(s => (
+          {secrets.map((s) => (
             <tr key={s.key}>
               <td>
                 <code>{s.key}</code>
@@ -136,12 +136,14 @@ function ProjectSecrets({ projectId }: { projectId: string }) {
         </tbody>
       </table>
     </div>
-  )
+  );
 }
 
-const element = document.getElementById('project-secrets-root')
+const element = document.getElementById("project-secrets-root");
 if (element) {
   createRoot(element).render(
-    <ProjectSecrets projectId={element.getAttribute('data-project-id') || ''} />
-  )
+    <ProjectSecrets
+      projectId={element.getAttribute("data-project-id") || ""}
+    />,
+  );
 }

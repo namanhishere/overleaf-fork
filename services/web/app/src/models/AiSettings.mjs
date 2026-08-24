@@ -1,6 +1,6 @@
 import mongoose from "../infrastructure/Mongoose.mjs";
 
-const { Schema } = mongoose
+const { Schema } = mongoose;
 
 // Global AI provider configuration (single document). OpenAI-compatible
 // chat-completions API so any provider (OpenAI, Azure, vLLM, Ollama...)
@@ -15,6 +15,6 @@ const AiSettingsSchema = new Schema(
     maxIterations: { type: Number, default: 3, min: 1, max: 10 },
   },
   { collection: "aiSettings", timestamps: true },
-)
+);
 
-export const AiSettings = mongoose.model('AiSettings', AiSettingsSchema)
+export const AiSettings = mongoose.model("AiSettings", AiSettingsSchema);

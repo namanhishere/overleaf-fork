@@ -18,10 +18,9 @@ function gitBridgeEnabled() {
 }
 
 async function getGitInfo(projectId, userId) {
-  const project = await ProjectGetter.promises.getProject(
-    projectId,
-    { owner_ref: 1 },
-  );
+  const project = await ProjectGetter.promises.getProject(projectId, {
+    owner_ref: 1,
+  });
   if (project == null) throw new OError("project not found", { projectId });
   const base = getGitBridgeBaseUrl();
   if (!base || !gitBridgeEnabled()) {

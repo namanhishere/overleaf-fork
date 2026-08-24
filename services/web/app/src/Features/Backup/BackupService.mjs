@@ -2,12 +2,15 @@ import fs from "node:fs";
 import path from "node:path";
 import zlib from "node:zlib";
 import crypto from "node:crypto";
-import mongodb, { db, getDb, getCollectionInternal } from "../../infrastructure/mongodb.mjs";
+import mongodb, {
+  db,
+  getDb,
+  getCollectionInternal,
+} from "../../infrastructure/mongodb.mjs";
 import logger from "@overleaf/logger";
 import OError from "@overleaf/o-error";
 
-const BACKUP_DIR =
-  process.env.OVERLEAF_BACKUP_DIR || "/tmp/overleaf-backups";
+const BACKUP_DIR = process.env.OVERLEAF_BACKUP_DIR || "/tmp/overleaf-backups";
 // System collections that must never be dumped or restored.
 const SKIP_COLLECTIONS = new Set(["migrations"]);
 const RESTORE_TEST_DB = "sharelatex_restore_test";
@@ -51,13 +54,18 @@ async function runBackup({ label = "" } = {}) {
   try {
     fs.mkdirSync(path.join(runDir(runId), "mongo"), { recursive: true });
     const names = (await mongodb.getCollectionNames()).filter(
-      n => !n.startsWith("system.") && !SKIP_COLLECTIONS.has(n),
+      (n) => !n.startsWith("system.") && !SKIP_COLLECTIONS.has(n),
     );
     for (const name of names.sort()) {
       const file = path.join(runDir(runId), "mongo", `${name}.json.gz`);
       const count = await dumpCollection(name, file);
       const sizeBytes = fs.statSync(file).size;
-      record.collections.push({ name, count, file: `mongo/${name}.json.gz`, sizeBytes });
+      record.collections.push({
+        name,
+        count,
+        file: `mongo/${name}.json.gz`,
+        sizeBytes,
+      });
     }
     record.status = "complete";
     record.finishedAt = new Date();
@@ -94,22 +102,25 @@ function dumpCollection(name, file) {
     const pump = async () => {
       while (true) {
         const docs = [];
-        while (docs.length < 500 && (docs.length === 0 || (await cursor.hasNext()))) {
+        while (
+          docs.length < 500 &&
+          (docs.length === 0 || (await cursor.hasNext()))
+        ) {
           if (docs.length > 0 && !(await cursor.hasNext())) break;
           const doc = await cursor.next();
           if (doc == null) break;
           docs.push(doc);
         }
         if (docs.length === 0) break;
-        const lines = docs.map(d => JSON.stringify(d)).join("\n") + "\n";
+        const lines = docs.map((d) => JSON.stringify(d)).join("\n") + "\n";
         if (!gz.write(lines)) {
-          await new Promise(r => gz.once("drain", r));
+          await new Promise((r) => gz.once("drain", r));
         }
         count += docs.length;
       }
       gz.end();
     };
-    pump().catch(err => {
+    pump().catch((err) => {
       gz.destroy(err);
     });
     out.on("error", reject);
@@ -125,7 +136,7 @@ async function listBackups({ limit = 50 } = {}) {
     .limit(Math.min(limit, 200))
     .toArray();
   // annotate with on-disk presence
-  return runs.map(r => ({
+  return runs.map((r) => ({
     ...r,
     onDisk: fs.existsSync(runDir(r.runId)),
   }));
@@ -168,11 +179,11 @@ async function restoreBackup(runId, { targetDb = RESTORE_TEST_DB } = {}) {
       .gunzipSync(fs.readFileSync(file))
       .toString()
       .split("\n")
-      .filter(l => l.trim());
+      .filter((l) => l.trim());
     const coll = target.collection(entry.name);
     await coll.deleteMany({});
     if (lines.length > 0) {
-      const docs = lines.map(l => JSON.parse(l));
+      const docs = lines.map((l) => JSON.parse(l));
       // chunk inserts to stay under limits
       for (let i = 0; i < docs.length; i += 500) {
         await coll.insertMany(docs.slice(i, i + 500));
@@ -186,7 +197,7 @@ async function restoreBackup(runId, { targetDb = RESTORE_TEST_DB } = {}) {
       ok: restored === entry.count,
     });
   }
-  const ok = results.every(r => r.ok);
+  const ok = results.every((r) => r.ok);
   await db.backupRuns.updateOne(
     { runId },
     {

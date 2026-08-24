@@ -1,54 +1,54 @@
-import { createRoot } from 'react-dom/client'
-import { useEffect, useState } from 'react'
-import { getJSON } from '@/infrastructure/fetch-json'
+import { createRoot } from "react-dom/client";
+import { useEffect, useState } from "react";
+import { getJSON } from "@/infrastructure/fetch-json";
 
-type MongoMember = { name: string; state: string; healthy: boolean }
+type MongoMember = { name: string; state: string; healthy: boolean };
 type MongoHealth = {
-  replicaSet: boolean | null
-  setName?: string | null
-  healthy: boolean
-  standalone?: boolean
-  members?: MongoMember[]
-  error?: string
-}
+  replicaSet: boolean | null;
+  setName?: string | null;
+  healthy: boolean;
+  standalone?: boolean;
+  members?: MongoMember[];
+  error?: string;
+};
 type ServiceHealth = {
-  name: string
-  url?: string
-  configured?: boolean
-  healthy: boolean | null
-  error?: string
-}
+  name: string;
+  url?: string;
+  configured?: boolean;
+  healthy: boolean | null;
+  error?: string;
+};
 type StorageHealth = {
-  mongo: MongoHealth
-  services: ServiceHealth[]
-  checkedAt: string
-}
+  mongo: MongoHealth;
+  services: ServiceHealth[];
+  checkedAt: string;
+};
 
 function StorageDashboard() {
-  const [data, setData] = useState<StorageHealth | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [data, setData] = useState<StorageHealth | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   async function refresh() {
-    setError(null)
+    setError(null);
     try {
-      setData(await getJSON<StorageHealth>('/admin/api/storage'))
+      setData(await getJSON<StorageHealth>("/admin/api/storage"));
     } catch (err) {
-      setError(String((err as Error).message))
+      setError(String((err as Error).message));
     }
   }
 
   useEffect(() => {
-    refresh()
-    const timer = setInterval(refresh, 30000)
-    return () => clearInterval(timer)
-  }, [])
+    refresh();
+    const timer = setInterval(refresh, 30000);
+    return () => clearInterval(timer);
+  }, []);
 
   return (
     <div>
       <h1>Storage health</h1>
       <p>
-        <a href="/admin">Back to admin</a> · <a href="/admin/users">Users</a> ·{' '}
-        <a href="/admin/jobs">Jobs</a> · <a href="/admin/workers">Workers</a> ·{' '}
+        <a href="/admin">Back to admin</a> · <a href="/admin/users">Users</a> ·{" "}
+        <a href="/admin/jobs">Jobs</a> · <a href="/admin/workers">Workers</a> ·{" "}
         <a href="/admin/audit">Audit</a>
         {data
           ? ` · last checked ${new Date(data.checkedAt).toLocaleTimeString()}`
@@ -69,11 +69,11 @@ function StorageDashboard() {
                 </tr>
               </thead>
               <tbody>
-                {data.mongo.members!.map(m => (
+                {data.mongo.members!.map((m) => (
                   <tr key={m.name}>
                     <td>{m.name}</td>
                     <td>{m.state}</td>
-                    <td>{m.healthy ? '✓' : '✗'}</td>
+                    <td>{m.healthy ? "✓" : "✗"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -82,7 +82,7 @@ function StorageDashboard() {
             <p>Standalone MongoDB (no replication) — single-node deployment.</p>
           ) : (
             <p className="text-danger">
-              MongoDB status unavailable: {data.mongo.error || 'unknown error'}
+              MongoDB status unavailable: {data.mongo.error || "unknown error"}
             </p>
           )}
           <h2>Storage services</h2>
@@ -95,16 +95,16 @@ function StorageDashboard() {
               </tr>
             </thead>
             <tbody>
-              {data.services.map(s => (
+              {data.services.map((s) => (
                 <tr key={s.name}>
                   <td>{s.name}</td>
-                  <td>{s.url || 'not configured'}</td>
+                  <td>{s.url || "not configured"}</td>
                   <td>
                     {s.healthy == null
-                      ? '—'
+                      ? "—"
                       : s.healthy
-                        ? '✓'
-                        : `✗ ${s.error || ''}`}
+                        ? "✓"
+                        : `✗ ${s.error || ""}`}
                   </td>
                 </tr>
               ))}
@@ -113,10 +113,10 @@ function StorageDashboard() {
         </>
       ) : null}
     </div>
-  )
+  );
 }
 
-const element = document.getElementById('admin-storage-root')
+const element = document.getElementById("admin-storage-root");
 if (element) {
-  createRoot(element).render(<StorageDashboard />)
+  createRoot(element).render(<StorageDashboard />);
 }

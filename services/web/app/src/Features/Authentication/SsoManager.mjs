@@ -65,13 +65,9 @@ async function createProvider(body, userId = null) {
           ? String(body.issuerUrl).trim().replace(/\/$/, "")
           : null,
       clientId:
-        type === "oidc" && body.clientId
-          ? String(body.clientId).trim()
-          : null,
+        type === "oidc" && body.clientId ? String(body.clientId).trim() : null,
       clientSecret:
-        type === "oidc" && body.clientSecret
-          ? String(body.clientSecret)
-          : null,
+        type === "oidc" && body.clientSecret ? String(body.clientSecret) : null,
       ldapUrl: body.ldapUrl ? String(body.ldapUrl).trim() : null,
       adminDn: body.adminDn ? String(body.adminDn).trim() : null,
       adminPassword: body.adminPassword ? String(body.adminPassword) : null,
@@ -103,13 +99,11 @@ async function updateProvider(slug, body, userId = null) {
   // clientSecret is write-only: only update when a non-empty value arrives.
   if (body.clientSecret) patch.clientSecret = String(body.clientSecret);
   if (body.scopes != null) patch.scopes = String(body.scopes);
-  if (body.ldapUrl != null)
-    patch.ldapUrl = String(body.ldapUrl).trim() || null;
+  if (body.ldapUrl != null) patch.ldapUrl = String(body.ldapUrl).trim() || null;
   if (body.adminDn != null) patch.adminDn = String(body.adminDn).trim() || null;
   if (body.adminPassword) patch.adminPassword = String(body.adminPassword);
   if (body.baseDn != null) patch.baseDn = String(body.baseDn).trim() || null;
-  if (body.searchFilter != null)
-    patch.searchFilter = String(body.searchFilter);
+  if (body.searchFilter != null) patch.searchFilter = String(body.searchFilter);
   if (body.autoRegister !== undefined)
     patch.autoRegister = Boolean(body.autoRegister);
   await SsoProvider.updateOne({ slug }, { $set: patch }).exec();
@@ -218,7 +212,9 @@ async function findOrCreateUser(provider, claims) {
   if (!provider.autoRegister) {
     throw new OError("no local account for SSO identity", { email });
   }
-  const names = String(claims.name || "").trim().split(/\s+/);
+  const names = String(claims.name || "")
+    .trim()
+    .split(/\s+/);
   const firstName = claims.given_name || names[0] || email.split("@")[0];
   const lastName = claims.family_name || names.slice(1).join(" ") || "";
   return UserCreator.promises.createNewUser({
@@ -241,7 +237,10 @@ async function authenticateLdap(provider, username, password) {
     throw new OError("not an LDAP provider", { slug: provider.slug });
   }
   const escapeLdap = (v) =>
-    String(v).replace(/[\\*()\0]/g, (c) => "\\" + c.charCodeAt(0).toString(16).padStart(2, "0"));
+    String(v).replace(
+      /[\\*()\0]/g,
+      (c) => "\\" + c.charCodeAt(0).toString(16).padStart(2, "0"),
+    );
   const filter = (provider.searchFilter || "(mail={{username}})").replace(
     "{{username}}",
     escapeLdap(username),

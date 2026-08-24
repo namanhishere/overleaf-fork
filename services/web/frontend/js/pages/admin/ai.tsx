@@ -1,52 +1,52 @@
-import { createRoot } from 'react-dom/client'
-import { useEffect, useState } from 'react'
-import { getJSON, putJSON } from '@/infrastructure/fetch-json'
+import { createRoot } from "react-dom/client";
+import { useEffect, useState } from "react";
+import { getJSON, putJSON } from "@/infrastructure/fetch-json";
 
 type AiSettings = {
-  enabled: boolean
-  baseUrl: string | null
-  model: string | null
-  maxIterations: number
-  apiKeySaved: boolean
-}
+  enabled: boolean;
+  baseUrl: string | null;
+  model: string | null;
+  maxIterations: number;
+  apiKeySaved: boolean;
+};
 
 function AdminAi() {
-  const [settings, setSettings] = useState<AiSettings | null>(null)
-  const [apiKey, setApiKey] = useState('')
-  const [message, setMessage] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [settings, setSettings] = useState<AiSettings | null>(null);
+  const [apiKey, setApiKey] = useState("");
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    getJSON<{ settings: AiSettings }>('/admin/api/ai')
-      .then(data =>
-        setSettings({ ...data.settings, apiKeySaved: !!data.settings.apiKey })
+    getJSON<{ settings: AiSettings }>("/admin/api/ai")
+      .then((data) =>
+        setSettings({ ...data.settings, apiKeySaved: !!data.settings.apiKey }),
       )
-      .catch(err => setError(String(err.message)))
-  }, [])
+      .catch((err) => setError(String(err.message)));
+  }, []);
 
   async function save(e: React.FormEvent) {
-    e.preventDefault()
-    setError(null)
-    setMessage(null)
+    e.preventDefault();
+    setError(null);
+    setMessage(null);
     try {
       const body: Record<string, unknown> = {
         enabled: settings!.enabled,
         baseUrl: settings!.baseUrl,
         model: settings!.model,
         maxIterations: settings!.maxIterations,
-      }
-      if (apiKey) body.apiKey = apiKey
-      await putJSON('/admin/api/ai', { body })
-      setMessage('Settings saved.')
-      setApiKey('')
-      const data = await getJSON<{ settings: AiSettings }>('/admin/api/ai')
-      setSettings({ ...data.settings, apiKeySaved: !!data.settings.apiKey })
+      };
+      if (apiKey) body.apiKey = apiKey;
+      await putJSON("/admin/api/ai", { body });
+      setMessage("Settings saved.");
+      setApiKey("");
+      const data = await getJSON<{ settings: AiSettings }>("/admin/api/ai");
+      setSettings({ ...data.settings, apiKeySaved: !!data.settings.apiKey });
     } catch (err) {
-      setError(String((err as Error).message))
+      setError(String((err as Error).message));
     }
   }
 
-  if (!settings) return <p>Loading…</p>
+  if (!settings) return <p>Loading…</p>;
 
   return (
     <div className="container">
@@ -65,46 +65,50 @@ function AdminAi() {
           <input
             type="checkbox"
             checked={settings.enabled}
-            onChange={e => setSettings({ ...settings, enabled: e.target.checked })}
-          />{' '}
+            onChange={(e) =>
+              setSettings({ ...settings, enabled: e.target.checked })
+            }
+          />{" "}
           Enabled
         </label>
         <br />
         <br />
         <input
           type="text"
-          value={settings.baseUrl || ''}
+          value={settings.baseUrl || ""}
           placeholder="Base URL (https://api.openai.com/v1)"
           size={44}
-          onChange={e => setSettings({ ...settings, baseUrl: e.target.value })}
+          onChange={(e) =>
+            setSettings({ ...settings, baseUrl: e.target.value })
+          }
         />
         <br />
         <br />
         <input
           type="text"
-          value={settings.model || ''}
+          value={settings.model || ""}
           placeholder="Model"
-          onChange={e => setSettings({ ...settings, model: e.target.value })}
+          onChange={(e) => setSettings({ ...settings, model: e.target.value })}
         />
         <br />
         <br />
         <input
           type="password"
           value={apiKey}
-          placeholder={settings.apiKeySaved ? 'API key saved' : 'API key'}
+          placeholder={settings.apiKeySaved ? "API key saved" : "API key"}
           size={44}
-          onChange={e => setApiKey(e.target.value)}
+          onChange={(e) => setApiKey(e.target.value)}
         />
         <br />
         <br />
         <label>
-          Max agent iterations:{' '}
+          Max agent iterations:{" "}
           <input
             type="number"
             min={1}
             max={10}
             value={settings.maxIterations}
-            onChange={e =>
+            onChange={(e) =>
               setSettings({
                 ...settings,
                 maxIterations: parseInt(e.target.value, 10) || 3,
@@ -119,10 +123,10 @@ function AdminAi() {
         </button>
       </form>
     </div>
-  )
+  );
 }
 
-const element = document.getElementById('admin-ai-root')
+const element = document.getElementById("admin-ai-root");
 if (element) {
-  createRoot(element).render(<AdminAi />)
+  createRoot(element).render(<AdminAi />);
 }

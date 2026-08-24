@@ -60,7 +60,9 @@ export function toLatex(markdown) {
     if (heading) {
       closeList();
       const level = heading[1].length;
-      const cmd = ["section", "section", "subsection", "subsubsection"][Math.min(level, 3)];
+      const cmd = ["section", "section", "subsection", "subsubsection"][
+        Math.min(level, 3)
+      ];
       out.push(`\\${cmd}{${inline(heading[2])}}`);
       continue;
     }
@@ -156,9 +158,13 @@ async function loadDoc(projectId, docId) {
     element_id: docId,
     type: "doc",
   });
-  const { lines } = await ProjectEntityHandler.promises.getDoc(projectId, docId, {
-    peek: true,
-  });
+  const { lines } = await ProjectEntityHandler.promises.getDoc(
+    projectId,
+    docId,
+    {
+      peek: true,
+    },
+  );
   // findElement returns path as { fileSystem, mongo }; expose the readable one
   return { lines, path: elementPath.fileSystem };
 }

@@ -32,11 +32,14 @@ async function compileStats(since) {
     }
   }
   const failed =
-    (byStatus.failed || 0) + (byStatus.timeout || 0) + (byStatus.discarded || 0);
+    (byStatus.failed || 0) +
+    (byStatus.timeout || 0) +
+    (byStatus.discarded || 0);
   return {
     total,
     byStatus,
-    avgRuntimeMs: runtimeCount > 0 ? Math.round(runtimeSumMs / runtimeCount) : null,
+    avgRuntimeMs:
+      runtimeCount > 0 ? Math.round(runtimeSumMs / runtimeCount) : null,
     failureRate: total > 0 ? Math.round((failed / total) * 1000) / 10 : null,
   };
 }
@@ -53,7 +56,6 @@ async function userStats() {
 async function auditStats(since) {
   return AuditEntry.countDocuments({ timestamp: { $gte: since } });
 }
-
 
 async function queueStats() {
   try {
@@ -84,13 +86,7 @@ async function workerHealth() {
 // GET /admin/api/observability
 async function getObservability(req, res) {
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const [
-    compiles,
-    users,
-    auditEntries,
-    queue,
-    workers,
-  ] = await Promise.all([
+  const [compiles, users, auditEntries, queue, workers] = await Promise.all([
     compileStats(since),
     userStats(),
     auditStats(since),

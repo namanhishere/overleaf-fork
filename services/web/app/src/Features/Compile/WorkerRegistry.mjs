@@ -31,7 +31,7 @@ export function defaultBaseUrl() {
 
 export function getWorker(workerId) {
   if (workerId == null) return null;
-  return configuredWorkers().find(w => w.id === workerId) || null;
+  return configuredWorkers().find((w) => w.id === workerId) || null;
 }
 
 async function getPinnedWorkerId(projectId) {

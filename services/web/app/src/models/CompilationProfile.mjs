@@ -1,6 +1,6 @@
 import mongoose from "../infrastructure/Mongoose.mjs";
 
-const { Schema } = mongoose
+const { Schema } = mongoose;
 
 // Admin-managed compilation environment. Applying a profile to a project
 // sets the project's compiler and TeX Live image; the values actually used
@@ -25,9 +25,9 @@ const CompilationProfileSchema = new Schema(
     createdBy: { type: Schema.Types.ObjectId, default: null },
   },
   { collection: "compilationProfiles", timestamps: true },
-)
+);
 
 export const CompilationProfile = mongoose.model(
-  'CompilationProfile',
-  CompilationProfileSchema
-)
+  "CompilationProfile",
+  CompilationProfileSchema,
+);

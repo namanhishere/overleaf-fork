@@ -77,7 +77,10 @@ async function applyToProject(req, res) {
       projectId,
       _userId(req),
     );
-    res.json({ ok: true, applied: { compiler: profile.compiler, imageName: profile.imageName } });
+    res.json({
+      ok: true,
+      applied: { compiler: profile.compiler, imageName: profile.imageName },
+    });
   } catch (err) {
     if (String(err?.message).includes("profile not found")) {
       return res.status(404).json({ error: "profile not found" });

@@ -12,13 +12,17 @@ function _userId(req) {
 // GET /admin/api/ai
 async function getSettings(req, res) {
   const settings = await AiAgentService.promises.getSettings();
-  res.json({ settings: { ...settings, apiKey: settings.apiKey ? "saved" : null } });
+  res.json({
+    settings: { ...settings, apiKey: settings.apiKey ? "saved" : null },
+  });
 }
 
 // PUT /admin/api/ai
 async function saveSettings(req, res) {
   const settings = await AiAgentService.promises.saveSettings(req.body || {});
-  res.json({ settings: { ...settings, apiKey: settings.apiKey ? "saved" : null } });
+  res.json({
+    settings: { ...settings, apiKey: settings.apiKey ? "saved" : null },
+  });
 }
 
 // ---- project ----
@@ -50,7 +54,7 @@ async function listProposals(req, res) {
     { includeResolved: req.query.all === "true" },
   );
   res.json({
-    proposals: proposals.map(p => ({
+    proposals: proposals.map((p) => ({
       ...p,
       diff: AiAgentService.simpleDiff(p.previousLines, p.newLines),
     })),

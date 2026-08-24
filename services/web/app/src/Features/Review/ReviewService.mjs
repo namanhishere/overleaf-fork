@@ -37,7 +37,7 @@ async function getReviewStatus(projectId) {
     return String(b.lastActivity).localeCompare(String(a.lastActivity));
   });
 
-  const unresolved = entries.filter(e => !e.resolved).length;
+  const unresolved = entries.filter((e) => !e.resolved).length;
   const resolved = entries.length - unresolved;
   const summary =
     entries.length === 0
@@ -45,7 +45,13 @@ async function getReviewStatus(projectId) {
       : `${unresolved} unresolved comment${unresolved === 1 ? "" : "s"} remain` +
         ` (${resolved} resolved, ${entries.length} total).`;
 
-  return { threads: entries, total: entries.length, unresolved, resolved, summary };
+  return {
+    threads: entries,
+    total: entries.length,
+    unresolved,
+    resolved,
+    summary,
+  };
 }
 
 // ---- reviewer assignment (PLANS 9: reviewer roles) ----
@@ -57,12 +63,17 @@ async function listProjectMembers(projectId) {
     first_name: 1,
     last_name: 1,
   });
-  return memberIds.map(id => {
-    const u = Array.isArray(members) ? members.find(m => String(m._id) === String(id)) : null;
+  return memberIds.map((id) => {
+    const u = Array.isArray(members)
+      ? members.find((m) => String(m._id) === String(id))
+      : null;
     return {
       _id: String(id),
       email: u?.email || null,
-      name: [u?.first_name, u?.last_name].filter(Boolean).join(" ") || u?.email || String(id),
+      name:
+        [u?.first_name, u?.last_name].filter(Boolean).join(" ") ||
+        u?.email ||
+        String(id),
     };
   });
 }
@@ -80,12 +91,17 @@ async function getReviewers(projectId) {
     first_name: 1,
     last_name: 1,
   });
-  return ids.map(id => {
-    const u = Array.isArray(users) ? users.find(m => String(m._id) === id) : null;
+  return ids.map((id) => {
+    const u = Array.isArray(users)
+      ? users.find((m) => String(m._id) === id)
+      : null;
     return {
       _id: id,
       email: u?.email || null,
-      name: [u?.first_name, u?.last_name].filter(Boolean).join(" ") || u?.email || id,
+      name:
+        [u?.first_name, u?.last_name].filter(Boolean).join(" ") ||
+        u?.email ||
+        id,
     };
   });
 }

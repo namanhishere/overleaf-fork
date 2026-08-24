@@ -1,6 +1,6 @@
 import mongoose from "../infrastructure/Mongoose.mjs";
 
-const { Schema } = mongoose
+const { Schema } = mongoose;
 
 // Externally configured OIDC/OAuth2 identity provider. Providers are
 // database-backed so new identity providers can be added at runtime
@@ -33,9 +33,6 @@ const SsoProviderSchema = new Schema(
     // --- shared ---
   },
   { collection: "ssoProviders", timestamps: true },
-)
+);
 
-export const SsoProvider = mongoose.model(
-  'SsoProvider',
-  SsoProviderSchema
-)
+export const SsoProvider = mongoose.model("SsoProvider", SsoProviderSchema);

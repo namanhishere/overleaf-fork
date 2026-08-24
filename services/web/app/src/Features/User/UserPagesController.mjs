@@ -1,130 +1,134 @@
-import UserGetter from './UserGetter.mjs'
-import OError from '@overleaf/o-error'
-import UserSessionsManager from './UserSessionsManager.mjs'
-import logger from '@overleaf/logger'
-import Settings from '@overleaf/settings'
-import AuthenticationController from '../Authentication/AuthenticationController.mjs'
-import SsoManager from '../Authentication/SsoManager.mjs'
-import SessionManager from '../Authentication/SessionManager.mjs'
-import SubscriptionLocator from '../Subscription/SubscriptionLocator.mjs'
-import _ from 'lodash'
-import { expressify } from '@overleaf/promise-utils'
-import Features from '../../infrastructure/Features.mjs'
-import Modules from '../../infrastructure/Modules.mjs'
-import SplitTestHandler from '../SplitTests/SplitTestHandler.mjs'
+import UserGetter from "./UserGetter.mjs";
+import OError from "@overleaf/o-error";
+import UserSessionsManager from "./UserSessionsManager.mjs";
+import logger from "@overleaf/logger";
+import Settings from "@overleaf/settings";
+import AuthenticationController from "../Authentication/AuthenticationController.mjs";
+import SsoManager from "../Authentication/SsoManager.mjs";
+import SessionManager from "../Authentication/SessionManager.mjs";
+import SubscriptionLocator from "../Subscription/SubscriptionLocator.mjs";
+import _ from "lodash";
+import { expressify } from "@overleaf/promise-utils";
+import Features from "../../infrastructure/Features.mjs";
+import Modules from "../../infrastructure/Modules.mjs";
+import SplitTestHandler from "../SplitTests/SplitTestHandler.mjs";
 
 async function settingsPage(req, res) {
-  const userId = SessionManager.getLoggedInUserId(req.session)
-  const reconfirmationRemoveEmail = req.query.remove
+  const userId = SessionManager.getLoggedInUserId(req.session);
+  const reconfirmationRemoveEmail = req.query.remove;
   // SSO
-  const ssoError = req.session.ssoError
+  const ssoError = req.session.ssoError;
   if (ssoError) {
-    delete req.session.ssoError
+    delete req.session.ssoError;
   }
-  const ssoErrorMessage = req.session.ssoErrorMessage
+  const ssoErrorMessage = req.session.ssoErrorMessage;
   if (ssoErrorMessage) {
-    delete req.session.ssoErrorMessage
+    delete req.session.ssoErrorMessage;
   }
-  const projectSyncSuccessMessage = req.session.projectSyncSuccessMessage
+  const projectSyncSuccessMessage = req.session.projectSyncSuccessMessage;
   if (projectSyncSuccessMessage) {
-    delete req.session.projectSyncSuccessMessage
+    delete req.session.projectSyncSuccessMessage;
   }
   // Institution SSO
-  let institutionLinked = _.get(req.session, ['saml', 'linked'])
+  let institutionLinked = _.get(req.session, ["saml", "linked"]);
   if (institutionLinked) {
     // copy object if exists because _.get does not
     institutionLinked = Object.assign(
       {
-        hasEntitlement: _.get(req.session, ['saml', 'hasEntitlement']),
+        hasEntitlement: _.get(req.session, ["saml", "hasEntitlement"]),
       },
-      institutionLinked
-    )
+      institutionLinked,
+    );
   }
-  const samlError = _.get(req.session, ['saml', 'error'])
+  const samlError = _.get(req.session, ["saml", "error"]);
   const institutionEmailNonCanonical = _.get(req.session, [
-    'saml',
-    'emailNonCanonical',
-  ])
+    "saml",
+    "emailNonCanonical",
+  ]);
   const institutionRequestedEmail = _.get(req.session, [
-    'saml',
-    'requestedEmail',
-  ])
+    "saml",
+    "requestedEmail",
+  ]);
 
-  const reconfirmedViaSAML = _.get(req.session, ['saml', 'reconfirmed'])
-  delete req.session.saml
-  let shouldAllowEditingDetails = true
+  const reconfirmedViaSAML = _.get(req.session, ["saml", "reconfirmed"]);
+  delete req.session.saml;
+  let shouldAllowEditingDetails = true;
   if (Settings.ldap && Settings.ldap.updateUserDetailsOnLogin) {
-    shouldAllowEditingDetails = false
+    shouldAllowEditingDetails = false;
   }
   if (Settings.saml && Settings.saml.updateUserDetailsOnLogin) {
-    shouldAllowEditingDetails = false
+    shouldAllowEditingDetails = false;
   }
-  const oauthProviders = Settings.oauthProviders || {}
+  const oauthProviders = Settings.oauthProviders || {};
 
-  const user = await UserGetter.promises.getUser(userId)
+  const user = await UserGetter.promises.getUser(userId);
   if (!user) {
     // The user has just deleted their account.
     return UserSessionsManager.removeSessionsFromRedis(
       { _id: userId },
       null,
-      () => res.redirect('/')
-    )
+      () => res.redirect("/"),
+    );
   }
 
-  let personalAccessTokens
+  let personalAccessTokens;
   try {
     const results = await Modules.promises.hooks.fire(
-      'listPersonalAccessTokens',
-      user._id
-    )
-    personalAccessTokens = results?.[0] ?? []
+      "listPersonalAccessTokens",
+      user._id,
+    );
+    personalAccessTokens = results?.[0] ?? [];
   } catch (error) {
-    const err = OError.tag(error, 'listPersonalAccessTokens hook failed')
-    logger.error({ err, userId }, err.message)
+    const err = OError.tag(error, "listPersonalAccessTokens hook failed");
+    logger.error({ err, userId }, err.message);
   }
 
-  let currentManagedUserAdminEmail
+  let currentManagedUserAdminEmail;
   try {
     currentManagedUserAdminEmail =
-      await SubscriptionLocator.promises.getAdminEmail(req.managedBy)
+      await SubscriptionLocator.promises.getAdminEmail(req.managedBy);
   } catch (err) {
-    logger.error({ err }, 'error getting subscription admin email')
+    logger.error({ err }, "error getting subscription admin email");
   }
 
-  let memberOfSSOEnabledGroups = []
+  let memberOfSSOEnabledGroups = [];
   try {
     memberOfSSOEnabledGroups =
       (
         await Modules.promises.hooks.fire(
-          'getUserGroupsSSOEnrollmentStatus',
+          "getUserGroupsSSOEnrollmentStatus",
           user._id,
           { teamName: 1 },
-          ['email']
+          ["email"],
         )
-      )?.[0] || []
-    memberOfSSOEnabledGroups = memberOfSSOEnabledGroups.map(group => {
+      )?.[0] || [];
+    memberOfSSOEnabledGroups = memberOfSSOEnabledGroups.map((group) => {
       return {
         groupId: group._id.toString(),
         linked: group.linked,
         groupName: group.teamName,
         adminEmail: group.admin_id?.email,
-      }
-    })
+      };
+    });
   } catch (error) {
     logger.error(
       { err: error },
-      'error fetching groups with Group SSO enabled the user may be member of'
-    )
+      "error fetching groups with Group SSO enabled the user may be member of",
+    );
   }
 
-  await SplitTestHandler.promises.getAssignment(req, res, 'email-notifications')
   await SplitTestHandler.promises.getAssignment(
     req,
     res,
-    'domain-captured-by-group'
-  )
-  res.render('user/settings', {
-    title: 'account_settings',
+    "email-notifications",
+  );
+  await SplitTestHandler.promises.getAssignment(
+    req,
+    res,
+    "domain-captured-by-group",
+  );
+  res.render("user/settings", {
+    title: "account_settings",
     user: {
       id: user._id,
       isAdmin: user.isAdmin,
@@ -155,7 +159,7 @@ async function settingsPage(req, res) {
     shouldAllowEditingDetails,
     oauthProviders: UserPagesController._translateProviderDescriptions(
       oauthProviders,
-      req
+      req,
     ),
     institutionLinked,
     samlError,
@@ -175,69 +179,69 @@ async function settingsPage(req, res) {
     userRestrictions: Array.from(req.userRestrictions || []),
     currentManagedUserAdminEmail,
     gitBridgeEnabled: Settings.enableGitBridge,
-    isSaas: Features.hasFeature('saas'),
+    isSaas: Features.hasFeature("saas"),
     memberOfSSOEnabledGroups,
     capabilities: [...req.capabilitySet],
-  })
+  });
 }
 
 async function accountSuspended(req, res) {
   if (SessionManager.isUserLoggedIn(req.session)) {
-    return res.redirect('/project')
+    return res.redirect("/project");
   }
-  res.render('user/accountSuspended', {
-    title: 'your_account_is_suspended',
-  })
+  res.render("user/accountSuspended", {
+    title: "your_account_is_suspended",
+  });
 }
 
 async function logout(req, res) {
-  const isLoggedIn = SessionManager.isUserLoggedIn(req.session)
+  const isLoggedIn = SessionManager.isUserLoggedIn(req.session);
   if (!isLoggedIn) {
-    return res.redirect('/')
+    return res.redirect("/");
   }
-  res.render('user/logout')
+  res.render("user/logout");
 }
 
 async function reconfirmAccountPage(req, res) {
   const pageData = {
     reconfirm_email: req.session.reconfirm_email,
-  }
+  };
 
-  res.render('user/reconfirm', pageData)
+  res.render("user/reconfirm", pageData);
 }
 
 async function emailPreferencesPage(req, res) {
-  const userId = SessionManager.getLoggedInUserId(req.session)
+  const userId = SessionManager.getLoggedInUserId(req.session);
   const user = await UserGetter.promises.getUser(userId, {
     _id: 1,
     email: 1,
     first_name: 1,
     last_name: 1,
-  })
+  });
 
   if (!user) {
-    throw new Error('User not found')
+    throw new Error("User not found");
   }
 
-  let subscribed = false
+  let subscribed = false;
 
   try {
     const [preferences] = await Modules.promises.hooks.fire(
-      'getSubscriptionPreferences',
-      userId
-    )
+      "getSubscriptionPreferences",
+      userId,
+    );
 
-    subscribed = Boolean(preferences?.newsletter)
+    subscribed = Boolean(preferences?.newsletter);
   } catch (err) {
-    logger.error({ err, userId }, 'Error fetching newsletter subscription')
+    logger.error({ err, userId }, "Error fetching newsletter subscription");
   }
 
-  res.render('user/email-preferences', {
-    title: 'newsletter_info_title',
+  res.render("user/email-preferences", {
+    title: "newsletter_info_title",
     customerIoEnabled: true,
     subscribed,
     user,
-  })
+  });
 }
 
 const UserPagesController = {
@@ -245,19 +249,19 @@ const UserPagesController = {
   logout: expressify(logout),
 
   registerPage(req, res) {
-    const sharedProjectData = req.session.sharedProjectData || {}
+    const sharedProjectData = req.session.sharedProjectData || {};
 
-    const newTemplateData = {}
+    const newTemplateData = {};
     if (req.session.templateData != null) {
-      newTemplateData.templateName = req.session.templateData.templateName
+      newTemplateData.templateName = req.session.templateData.templateName;
     }
 
-    res.render('user/register', {
-      title: 'register',
+    res.render("user/register", {
+      title: "register",
       sharedProjectData,
       newTemplateData,
       samlBeta: req.session.samlBeta,
-    })
+    });
   },
 
   async loginPage(req, res) {
@@ -267,27 +271,27 @@ const UserPagesController = {
       req.query.redir != null &&
       AuthenticationController.getRedirectFromSession(req) == null
     ) {
-      AuthenticationController.setRedirectInSession(req, req.query.redir)
+      AuthenticationController.setRedirectInSession(req, req.query.redir);
     }
-    const metadata = { robotsNoindexNofollow: false }
+    const metadata = { robotsNoindexNofollow: false };
     if (Object.keys(req.query).length !== 0) {
-      metadata.robotsNoindexNofollow = true
+      metadata.robotsNoindexNofollow = true;
     }
-    let ssoProviders = []
+    let ssoProviders = [];
     try {
       ssoProviders = await SsoManager.promises.listProviders({
         enabledOnly: true,
-      })
+      });
     } catch {
-      ssoProviders = []
+      ssoProviders = [];
     }
-    res.render('user/login', {
-      title: Settings.nav?.login_support_title || 'login',
+    res.render("user/login", {
+      title: Settings.nav?.login_support_title || "login",
       login_support_title: Settings.nav?.login_support_title,
       login_support_text: Settings.nav?.login_support_text,
       metadata,
       ssoProviders,
-    })
+    });
   },
 
   /**
@@ -297,7 +301,7 @@ const UserPagesController = {
    * We tell them that Overleaf is back up and that they can login normally.
    */
   oneTimeLoginPage(req, res, next) {
-    res.render('user/one_time_login')
+    res.render("user/one_time_login");
   },
 
   renderReconfirmAccountPage: expressify(reconfirmAccountPage),
@@ -305,35 +309,35 @@ const UserPagesController = {
   settingsPage: expressify(settingsPage),
 
   sessionsPage(req, res, next) {
-    const user = SessionManager.getSessionUser(req.session)
-    logger.debug({ userId: user._id }, 'loading sessions page')
+    const user = SessionManager.getSessionUser(req.session);
+    logger.debug({ userId: user._id }, "loading sessions page");
     const currentSession = {
       ip_address: user.ip_address,
       session_created: user.session_created,
-    }
+    };
     UserSessionsManager.getAllUserSessions(
       user,
       [req.sessionID],
       (err, sessions) => {
         if (err != null) {
-          OError.tag(err, 'error getting all user sessions', {
+          OError.tag(err, "error getting all user sessions", {
             userId: user._id,
-          })
-          return next(err)
+          });
+          return next(err);
         }
-        res.render('user/sessions', {
-          title: 'sessions',
+        res.render("user/sessions", {
+          title: "sessions",
           currentSession,
           sessions,
-        })
-      }
-    )
+        });
+      },
+    );
   },
 
   emailPreferencesPage: expressify(emailPreferencesPage),
 
   async compromisedPasswordPage(req, res) {
-    res.render('user/compromised_password')
+    res.render("user/compromised_password");
   },
 
   _restructureThirdPartyIds(user) {
@@ -344,28 +348,28 @@ const UserPagesController = {
       !user.thirdPartyIdentifiers ||
       user.thirdPartyIdentifiers.length === 0
     ) {
-      return null
+      return null;
     }
     return user.thirdPartyIdentifiers.reduce((obj, identifier) => {
-      obj[identifier.providerId] = identifier.externalUserId
-      return obj
-    }, {})
+      obj[identifier.providerId] = identifier.externalUserId;
+      return obj;
+    }, {});
   },
 
   _translateProviderDescriptions(providers, req) {
-    const result = {}
+    const result = {};
     if (providers) {
       for (const provider in providers) {
-        const data = providers[provider]
+        const data = providers[provider];
         data.description = req.i18n.translate(
           data.descriptionKey,
-          Object.assign({}, data.descriptionOptions)
-        )
-        result[provider] = data
+          Object.assign({}, data.descriptionOptions),
+        );
+        result[provider] = data;
       }
     }
-    return result
+    return result;
   },
-}
+};
 
-export default UserPagesController
+export default UserPagesController;

@@ -81,7 +81,7 @@ async function listWorkers(req, res) {
 
 // POST /admin/api/workers/pin  { projectId, workerId | null }
 async function pinWorker(req, res) {
-  const projectId = String(req.body?.projectId || '');
+  const projectId = String(req.body?.projectId || "");
   const workerId = req.body?.workerId || null;
   if (!/^[a-f0-9]{24}$/.test(projectId)) {
     return res.status(400).json({ error: "missing or invalid projectId" });

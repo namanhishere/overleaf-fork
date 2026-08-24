@@ -86,7 +86,7 @@ async function readWorkerTelemetry(jobId) {
   }
 }
 
- let consumerStarted = false;
+let consumerStarted = false;
 
 async function startConsumer() {
   if (consumerStarted) {
@@ -137,9 +137,7 @@ const REAP_INTERVAL_MS = 60_000;
 const REAP_DEFAULT_MAX_AGE_MS = 30 * 60_000;
 
 async function reapStaleJobs(now = Date.now()) {
-  const cutoff = new Date(
-    now - REAP_DEFAULT_MAX_AGE_MS,
-  );
+  const cutoff = new Date(now - REAP_DEFAULT_MAX_AGE_MS);
   const result = await CompileJob.updateMany(
     {
       status: { $in: ["queued", "running"] },
@@ -277,8 +275,7 @@ const CompileJobManager = {
     if (merged.runtimeMs != null) update.runtimeMs = merged.runtimeMs;
     if (merged.peakCpuPercent != null)
       update.peakCpuPercent = merged.peakCpuPercent;
-    if (merged.peakRssBytes != null)
-      update.peakRssBytes = merged.peakRssBytes;
+    if (merged.peakRssBytes != null) update.peakRssBytes = merged.peakRssBytes;
     if (merged.logExcerpt != null)
       update.logExcerpt = String(merged.logExcerpt).slice(-8192);
     if (merged.workerId != null) update.workerId = merged.workerId;

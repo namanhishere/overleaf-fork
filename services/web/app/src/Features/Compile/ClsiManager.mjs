@@ -1,105 +1,105 @@
-import { callbackify } from 'node:util'
-import { callbackifyMultiResult } from '@overleaf/promise-utils'
+import { callbackify } from "node:util";
+import { callbackifyMultiResult } from "@overleaf/promise-utils";
 import {
   fetchStream,
   fetchString,
   fetchStringWithResponse,
   RequestFailedError,
-} from '@overleaf/fetch-utils'
-import Settings from '@overleaf/settings'
-import ProjectGetter from '../Project/ProjectGetter.mjs'
-import WorkerRegistry from './WorkerRegistry.mjs'
-import ProjectEntityHandler from '../Project/ProjectEntityHandler.mjs'
-import logger from '@overleaf/logger'
-import OError from '@overleaf/o-error'
-import { Cookie } from 'tough-cookie'
-import ClsiCookieManagerFactory from './ClsiCookieManager.mjs'
-import ClsiStateManager from './ClsiStateManager.mjs'
-import _ from 'lodash'
-import ClsiFormatChecker from './ClsiFormatChecker.mjs'
-import DocumentUpdaterHandler from '../DocumentUpdater/DocumentUpdaterHandler.mjs'
-import Metrics from '@overleaf/metrics'
-import Errors from '../Errors/Errors.js'
-import ClsiCacheHandler from './ClsiCacheHandler.mjs'
-import HistoryManager from '../History/HistoryManager.mjs'
-import SplitTestHandler from '../SplitTests/SplitTestHandler.mjs'
-import AnalyticsManager from '../Analytics/AnalyticsManager.mjs'
-import RedisWrapper from '../../infrastructure/RedisWrapper.mjs'
-import { getOutputFileURL } from './ClsiURLHelpers.mjs'
+} from "@overleaf/fetch-utils";
+import Settings from "@overleaf/settings";
+import ProjectGetter from "../Project/ProjectGetter.mjs";
+import WorkerRegistry from "./WorkerRegistry.mjs";
+import ProjectEntityHandler from "../Project/ProjectEntityHandler.mjs";
+import logger from "@overleaf/logger";
+import OError from "@overleaf/o-error";
+import { Cookie } from "tough-cookie";
+import ClsiCookieManagerFactory from "./ClsiCookieManager.mjs";
+import ClsiStateManager from "./ClsiStateManager.mjs";
+import _ from "lodash";
+import ClsiFormatChecker from "./ClsiFormatChecker.mjs";
+import DocumentUpdaterHandler from "../DocumentUpdater/DocumentUpdaterHandler.mjs";
+import Metrics from "@overleaf/metrics";
+import Errors from "../Errors/Errors.js";
+import ClsiCacheHandler from "./ClsiCacheHandler.mjs";
+import HistoryManager from "../History/HistoryManager.mjs";
+import SplitTestHandler from "../SplitTests/SplitTestHandler.mjs";
+import AnalyticsManager from "../Analytics/AnalyticsManager.mjs";
+import RedisWrapper from "../../infrastructure/RedisWrapper.mjs";
+import { getOutputFileURL } from "./ClsiURLHelpers.mjs";
 
 // use the redis db with eviction policy enabled
-const rclient = RedisWrapper.client('clsi_cookie')
+const rclient = RedisWrapper.client("clsi_cookie");
 
 const ClsiCookieManager = ClsiCookieManagerFactory(
-  Settings.apis.clsi?.backendGroupName
-)
+  Settings.apis.clsi?.backendGroupName,
+);
 const NewBackendCloudClsiCookieManager = ClsiCookieManagerFactory(
-  Settings.apis.clsi_new?.backendGroupName
-)
+  Settings.apis.clsi_new?.backendGroupName,
+);
 
-const VALID_COMPILERS = Settings.safeCompilers
-const OUTPUT_FILE_TIMEOUT_MS = 60000
-const CLSI_COOKIES_ENABLED = (Settings.clsiCookie?.key ?? '') !== ''
+const VALID_COMPILERS = Settings.safeCompilers;
+const OUTPUT_FILE_TIMEOUT_MS = 60000;
+const CLSI_COOKIES_ENABLED = (Settings.clsiCookie?.key ?? "") !== "";
 
 // The timeout in services/clsi/app.js is 10 minutes, so we'll be on the safe side with 12 minutes
-const COMPILE_REQUEST_TIMEOUT_MS = 12 * 60 * 1000
+const COMPILE_REQUEST_TIMEOUT_MS = 12 * 60 * 1000;
 
 // Enable clsi-cache for all compiles for 20min when detecting low capacity.
-const ENABLE_COMPILE_FROM_CACHE_ON_503_MS = 20 * 60 * 1000
-let enableCompileFromCacheUntil = 0
+const ENABLE_COMPILE_FROM_CACHE_ON_503_MS = 20 * 60 * 1000;
+let enableCompileFromCacheUntil = 0;
 
 function _baseHistoryVersionKey(projectId, userId) {
-  return `baseHistoryVersion:${projectId}:${userId}`
+  return `baseHistoryVersion:${projectId}:${userId}`;
 }
 
 async function getBaseHistoryVersion(projectId, userId) {
-  let v
+  let v;
   try {
-    v = await rclient.get(_baseHistoryVersionKey(projectId, userId))
+    v = await rclient.get(_baseHistoryVersionKey(projectId, userId));
   } catch (err) {
-    logger.warn({ err, projectId, userId }, 'failed to get baseHistoryVersion')
-    return -1
+    logger.warn({ err, projectId, userId }, "failed to get baseHistoryVersion");
+    return -1;
   }
-  if (!v) return -1
-  const n = parseInt(v, 10)
-  if (Number.isNaN(n)) return -1
-  return n
+  if (!v) return -1;
+  const n = parseInt(v, 10);
+  if (Number.isNaN(n)) return -1;
+  return n;
 }
 
 async function setBaseHistoryVersion(projectId, userId, baseHistoryVersion) {
-  const clsiCacheExpiryInSeconds = 8 * 24 * 60 * 60 // 8 days
+  const clsiCacheExpiryInSeconds = 8 * 24 * 60 * 60; // 8 days
   try {
     await rclient.setex(
       _baseHistoryVersionKey(projectId, userId),
       clsiCacheExpiryInSeconds,
-      baseHistoryVersion
-    )
+      baseHistoryVersion,
+    );
   } catch (err) {
-    logger.warn({ err, projectId, userId }, 'failed to set baseHistoryVersion')
+    logger.warn({ err, projectId, userId }, "failed to set baseHistoryVersion");
   }
 }
 
 async function clearBaseHistoryVersion(projectId, userId) {
-  await rclient.del(_baseHistoryVersionKey(projectId, userId))
+  await rclient.del(_baseHistoryVersionKey(projectId, userId));
 }
 
 function getDoubleCompilePercentile(projectId) {
-  return SplitTestHandler.getPercentile(projectId, 'double-compile', 'release')
+  return SplitTestHandler.getPercentile(projectId, "double-compile", "release");
 }
 
 function getNewCompileBackendClass(projectId, compileBackendClass) {
-  const clsi = Settings.apis.clsi
-  let cfg
+  const clsi = Settings.apis.clsi;
+  let cfg;
   if (compileBackendClass === clsi.standardCompileBackendClass) {
-    cfg = Settings.apis.clsi_new.doubleCompileFree
+    cfg = Settings.apis.clsi_new.doubleCompileFree;
   } else if (compileBackendClass === clsi.priorityCompileBackendClass) {
-    cfg = Settings.apis.clsi_new.doubleCompilePremium
+    cfg = Settings.apis.clsi_new.doubleCompilePremium;
   } else {
-    throw new Error('unknown ?compileBackendClass')
+    throw new Error("unknown ?compileBackendClass");
   }
-  if (!cfg.backendClass || !cfg.sample) return null
-  if (getDoubleCompilePercentile(projectId) >= cfg.sample) return null
-  return cfg.backendClass
+  if (!cfg.backendClass || !cfg.sample) return null;
+  if (getDoubleCompilePercentile(projectId) >= cfg.sample) return null;
+  return cfg.backendClass;
 }
 
 /**
@@ -113,117 +113,117 @@ async function clearClsiServerId(projectId, userId, compileBackendClass) {
     ClsiCookieManager.promises.clearServerId(
       projectId,
       userId,
-      compileBackendClass
+      compileBackendClass,
     ),
-  ]
+  ];
   if (Settings.apis.clsi_new?.url) {
     // Mirror resetting the clsiserverid in both backends.
     const newCompileBackendClass = getNewCompileBackendClass(
       projectId,
-      compileBackendClass
-    )
+      compileBackendClass,
+    );
     if (newCompileBackendClass) {
       jobs.push(
         NewBackendCloudClsiCookieManager.promises.clearServerId(
           projectId,
           userId,
-          newCompileBackendClass
-        )
-      )
+          newCompileBackendClass,
+        ),
+      );
     }
   }
-  await Promise.all(jobs)
+  await Promise.all(jobs);
 }
 
 function collectMetricsOnBlgFiles(outputFiles) {
-  let topLevel = 0
-  let nested = 0
+  let topLevel = 0;
+  let nested = 0;
   for (const outputFile of outputFiles) {
-    if (outputFile.type === 'blg') {
-      if (outputFile.path.includes('/')) {
-        nested++
+    if (outputFile.type === "blg") {
+      if (outputFile.path.includes("/")) {
+        nested++;
       } else {
-        topLevel++
+        topLevel++;
       }
     }
   }
-  Metrics.count('blg_output_file', topLevel, 1, { path: 'top-level' })
-  Metrics.count('blg_output_file', nested, 1, { path: 'nested' })
+  Metrics.count("blg_output_file", topLevel, 1, { path: "top-level" });
+  Metrics.count("blg_output_file", nested, 1, { path: "nested" });
 }
 
 async function sendRequest(project, projectId, userId, options) {
-  let result = await sendRequestOnce(project, projectId, userId, options)
-  if (result.status === 'missing-updates') {
+  let result = await sendRequestOnce(project, projectId, userId, options);
+  if (result.status === "missing-updates") {
     // try again with updated baseline
     result = await sendRequestOnce(project, projectId, userId, {
       ...options,
       baseHistoryVersion: result.baseHistoryVersion,
-    })
-  } else if (result.status === 'conflict') {
+    });
+  } else if (result.status === "conflict") {
     // Try again, with a full compile
     result = await sendRequestOnce(null, projectId, userId, {
       ...options,
-      syncType: 'full',
-    })
-  } else if (result.status === 'unavailable') {
+      syncType: "full",
+    });
+  } else if (result.status === "unavailable") {
     result = await sendRequestOnce(null, projectId, userId, {
       ...options,
-      syncType: 'full',
+      syncType: "full",
       forceNewClsiServer: true,
-    })
+    });
   }
-  return result
+  return result;
 }
 
 async function sendRequestOnce(project, projectId, userId, options) {
-  let req
+  let req;
   try {
-    req = await _buildRequest(project, projectId, userId, options)
+    req = await _buildRequest(project, projectId, userId, options);
   } catch (err) {
-    if (err.message === 'no main file specified') {
+    if (err.message === "no main file specified") {
       return {
-        status: 'validation-problems',
+        status: "validation-problems",
         validationProblems: { mainFile: err.message },
-      }
+      };
     } else {
-      throw OError.tag(err, 'Could not build request to CLSI', {
+      throw OError.tag(err, "Could not build request to CLSI", {
         projectId,
         options,
-      })
+      });
     }
   }
-  return await _sendBuiltRequest(projectId, userId, req, options)
+  return await _sendBuiltRequest(projectId, userId, req, options);
 }
 
 // for public API requests where there is no project id
 async function sendExternalRequest(submissionId, clsiRequest, options) {
   if (options == null) {
-    options = {}
+    options = {};
   }
-  return await _sendBuiltRequest(submissionId, null, clsiRequest, options)
+  return await _sendBuiltRequest(submissionId, null, clsiRequest, options);
 }
 
 async function stopCompile(projectId, userId, options) {
   if (options == null) {
-    options = {}
+    options = {};
   }
-  const { compileBackendClass, compileGroup } = options
+  const { compileBackendClass, compileGroup } = options;
   const url = await _getCompilerUrl(
     compileBackendClass,
     compileGroup,
     projectId,
     userId,
-    'compile/stop'
-  )
-  const opts = { method: 'POST' }
+    "compile/stop",
+  );
+  const opts = { method: "POST" };
   await _makeRequest(
     projectId,
     userId,
     compileGroup,
     compileBackendClass,
     url,
-    opts
-  )
+    opts,
+  );
 }
 
 /**
@@ -231,22 +231,22 @@ async function stopCompile(projectId, userId, options) {
  * @private
  */
 function _throwIfRejected(result) {
-  if (result.status === 'rejected') {
-    throw result.reason
+  if (result.status === "rejected") {
+    throw result.reason;
   }
 }
 
 async function deleteAuxFiles(projectId, userId, options, clsiserverid) {
   if (options == null) {
-    options = {}
+    options = {};
   }
-  const { compileBackendClass, compileGroup } = options
+  const { compileBackendClass, compileGroup } = options;
   const url = await _getCompilerUrl(
     compileBackendClass,
     compileGroup,
     projectId,
-    userId
-  )
+    userId,
+  );
   const [
     clsiResult,
     clsiCacheResult,
@@ -260,47 +260,47 @@ async function deleteAuxFiles(projectId, userId, options, clsiserverid) {
       compileGroup,
       compileBackendClass,
       url,
-      { method: 'DELETE' },
-      clsiserverid
+      { method: "DELETE" },
+      clsiserverid,
     ),
     ClsiCacheHandler.clearCache(projectId, userId),
     DocumentUpdaterHandler.promises.clearProjectState(projectId),
     clearClsiServerId(projectId, userId, compileBackendClass),
     clearBaseHistoryVersion(projectId, userId),
-  ])
-  if (clsiCacheResult.status === 'rejected') {
+  ]);
+  if (clsiCacheResult.status === "rejected") {
     logger.warn(
       { err: clsiCacheResult.reason, projectId, userId },
-      'purge clsi-cache failed'
-    )
+      "purge clsi-cache failed",
+    );
   }
-  if (baseHistoryVersionResult.status === 'rejected') {
+  if (baseHistoryVersionResult.status === "rejected") {
     logger.warn(
       { err: baseHistoryVersionResult.reason, projectId, userId },
-      'failed to clear baseHistoryVersion'
-    )
+      "failed to clear baseHistoryVersion",
+    );
   }
-  _throwIfRejected(clsiResult)
-  _throwIfRejected(documentUpdaterResult)
-  _throwIfRejected(clsiServerIdResult)
+  _throwIfRejected(clsiResult);
+  _throwIfRejected(documentUpdaterResult);
+  _throwIfRejected(clsiServerIdResult);
 }
 
 async function _sendBuiltRequest(projectId, userId, req, options) {
   if (options.forceNewClsiServer) {
-    await clearClsiServerId(projectId, userId, options.compileBackendClass)
+    await clearClsiServerId(projectId, userId, options.compileBackendClass);
   }
   const validationProblems = ClsiFormatChecker.checkRecoursesForProblems(
-    req.compile?.resources || []
-  )
+    req.compile?.resources || [],
+  );
   if (validationProblems != null) {
     logger.debug(
       { projectId, validationProblems },
-      'problems with users latex before compile was attempted'
-    )
+      "problems with users latex before compile was attempted",
+    );
     return {
-      status: 'validation-problems',
+      status: "validation-problems",
       validationProblems,
-    }
+    };
   }
 
   const { response, clsiServerId } = await _postToClsi(
@@ -308,17 +308,17 @@ async function _sendBuiltRequest(projectId, userId, req, options) {
     userId,
     req,
     options.compileBackendClass,
-    options.compileGroup
-  )
+    options.compileGroup,
+  );
 
   const outputFiles = _parseOutputFiles(
     projectId,
-    response && response.compile && response.compile.outputFiles
-  )
-  collectMetricsOnBlgFiles(outputFiles)
-  const compile = response?.compile || {}
+    response && response.compile && response.compile.outputFiles,
+  );
+  collectMetricsOnBlgFiles(outputFiles);
+  const compile = response?.compile || {};
   if (compile.baseHistoryVersion) {
-    await setBaseHistoryVersion(projectId, userId, compile.baseHistoryVersion)
+    await setBaseHistoryVersion(projectId, userId, compile.baseHistoryVersion);
   }
   return {
     status: compile.status,
@@ -331,7 +331,7 @@ async function _sendBuiltRequest(projectId, userId, req, options) {
     clsiCacheShard: compile.clsiCacheShard,
     baseHistoryVersion: compile.baseHistoryVersion,
     instanceType: compile.instanceType,
-  }
+  };
 }
 
 async function _makeRequestWithClsiServerId(
@@ -341,26 +341,26 @@ async function _makeRequestWithClsiServerId(
   compileBackendClass,
   url,
   opts,
-  clsiserverid
+  clsiserverid,
 ) {
   if (clsiserverid) {
     // ignore cookies and newBackend, go straight to the clsi node
-    const urlWithId = new URL(url)
-    urlWithId.searchParams.set('clsiserverid', clsiserverid)
+    const urlWithId = new URL(url);
+    urlWithId.searchParams.set("clsiserverid", clsiserverid);
 
-    let body
+    let body;
     try {
-      body = await fetchString(urlWithId, opts)
+      body = await fetchString(urlWithId, opts);
     } catch (err) {
-      throw OError.tag(err, 'error making request to CLSI', {
+      throw OError.tag(err, "error making request to CLSI", {
         userId,
         projectId,
-      })
+      });
     }
 
-    let json
+    let json;
     try {
-      json = JSON.parse(body)
+      json = JSON.parse(body);
     } catch (err) {
       // some responses are empty. Ignore JSON parsing errors.
     }
@@ -371,12 +371,12 @@ async function _makeRequestWithClsiServerId(
       compileGroup,
       compileBackendClass,
       url,
-      opts
-    ).catch(err => {
-      logger.warn({ err }, 'Error making request to new CLSI backend')
-    })
+      opts,
+    ).catch((err) => {
+      logger.warn({ err }, "Error making request to new CLSI backend");
+    });
 
-    return { body: json }
+    return { body: json };
   } else {
     return await _makeRequest(
       projectId,
@@ -384,8 +384,8 @@ async function _makeRequestWithClsiServerId(
       compileGroup,
       compileBackendClass,
       url,
-      opts
-    )
+      opts,
+    );
   }
 }
 
@@ -395,86 +395,86 @@ async function _makeRequest(
   compileGroup,
   compileBackendClass,
   url,
-  opts
+  opts,
 ) {
-  const currentBackendStartTime = new Date()
+  const currentBackendStartTime = new Date();
   const clsiServerId = await ClsiCookieManager.promises.getServerId(
     projectId,
     userId,
     compileGroup,
-    compileBackendClass
-  )
+    compileBackendClass,
+  );
   opts.headers = {
-    Accept: 'application/json',
-    'Content-Type': 'application/json',
-  }
+    Accept: "application/json",
+    "Content-Type": "application/json",
+  };
 
   if (CLSI_COOKIES_ENABLED) {
     const cookie = new Cookie({
       key: Settings.clsiCookie.key,
       value: clsiServerId,
-    })
-    opts.headers.Cookie = cookie.cookieString()
+    });
+    opts.headers.Cookie = cookie.cookieString();
   }
 
-  const timer = new Metrics.Timer('compile.currentBackend')
+  const timer = new Metrics.Timer("compile.currentBackend");
 
-  let response, body
+  let response, body;
   try {
-    ;({ body, response } = await fetchStringWithResponse(url, opts))
+    ({ body, response } = await fetchStringWithResponse(url, opts));
   } catch (err) {
-    throw OError.tag(err, 'error making request to CLSI', {
+    throw OError.tag(err, "error making request to CLSI", {
       projectId,
       userId,
-    })
+    });
   }
 
-  Metrics.inc(`compile.currentBackend.response.${response.status}`)
+  Metrics.inc(`compile.currentBackend.response.${response.status}`);
 
-  let json
+  let json;
   try {
-    json = JSON.parse(body)
+    json = JSON.parse(body);
   } catch (err) {
     // some responses are empty. Ignore JSON parsing errors
   }
 
-  timer.done()
-  let newClsiServerId
+  timer.done();
+  let newClsiServerId;
   if (CLSI_COOKIES_ENABLED) {
-    newClsiServerId = getClsiServerIdFromResponse(response)
+    newClsiServerId = getClsiServerIdFromResponse(response);
     await ClsiCookieManager.promises.setServerId(
       projectId,
       userId,
       compileGroup,
       compileBackendClass,
       newClsiServerId,
-      clsiServerId
-    )
+      clsiServerId,
+    );
   }
-  const currentCompileTime = new Date() - currentBackendStartTime
+  const currentCompileTime = new Date() - currentBackendStartTime;
 
   // Start new backend request in the background
-  const newBackendStartTime = new Date()
+  const newBackendStartTime = new Date();
   _makeNewBackendRequest(
     projectId,
     userId,
     compileGroup,
     compileBackendClass,
     url,
-    opts
+    opts,
   )
-    .then(result => {
-      if (result == null || !url.pathname.endsWith('/compile')) {
-        return
+    .then((result) => {
+      if (result == null || !url.pathname.endsWith("/compile")) {
+        return;
       }
-      const current = json.compile
+      const current = json.compile;
       const {
         body: { compile: next },
         newCompileBackendClass,
-      } = result
-      const newBackendCompileTime = new Date() - newBackendStartTime
-      const statusCodeSame = next.status === current.status
-      const timeDifference = newBackendCompileTime - currentCompileTime
+      } = result;
+      const newBackendCompileTime = new Date() - newBackendStartTime;
+      const statusCodeSame = next.status === current.status;
+      const timeDifference = newBackendCompileTime - currentCompileTime;
       logger.debug(
         {
           statusCodeSame,
@@ -483,17 +483,17 @@ async function _makeRequest(
           newBackendCompileTime,
           projectId,
         },
-        'both clsi requests returned'
-      )
+        "both clsi requests returned",
+      );
       if (
-        current.status === 'success' &&
+        current.status === "success" &&
         current.status === next.status &&
         current.stats.isInitialCompile === next.stats.isInitialCompile &&
         current.stats.restoredClsiCache === next.stats.restoredClsiCache
       ) {
-        const fraction = next.timings.compileE2E / current.timings.compileE2E
+        const fraction = next.timings.compileE2E / current.timings.compileE2E;
         Metrics.histogram(
-          'compile_backend_difference_v1',
+          "compile_backend_difference_v1",
           fraction * 100,
           [
             // Increment the version in the metrics name when changing the buckets.
@@ -501,11 +501,11 @@ async function _makeRequest(
             10, 20, 30, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100,
             105, 110, 115, 120,
           ],
-          { path: compileBackendClass, method: newCompileBackendClass }
-        )
+          { path: compileBackendClass, method: newCompileBackendClass },
+        );
         AnalyticsManager.recordEventForUserInBackground(
           userId,
-          'double-compile-result',
+          "double-compile-result",
           {
             projectId,
             compileBackendClass,
@@ -516,22 +516,22 @@ async function _makeRequest(
             clsiServerId: newClsiServerId || clsiServerId,
             newClsiServerId: result.newClsiServerId,
             // Successful compiles are guaranteed to have an output.pdf file.
-            pdfSize: current.outputFiles.find(f => f.path === 'output.pdf')
+            pdfSize: current.outputFiles.find((f) => f.path === "output.pdf")
               .size,
-            newPdfSize: next.outputFiles.find(f => f.path === 'output.pdf')
+            newPdfSize: next.outputFiles.find((f) => f.path === "output.pdf")
               .size,
-          }
-        )
+          },
+        );
       }
     })
-    .catch(err => {
-      logger.warn({ err }, 'Error making request to new CLSI backend')
-    })
+    .catch((err) => {
+      logger.warn({ err }, "Error making request to new CLSI backend");
+    });
 
   return {
     body: json,
     clsiServerId: newClsiServerId || clsiServerId,
-  }
+  };
 }
 
 async function _makeNewBackendRequest(
@@ -540,82 +540,82 @@ async function _makeNewBackendRequest(
   compileGroup,
   currentCompileBackendClass,
   url,
-  opts
+  opts,
 ) {
   if (Settings.apis.clsi_new?.url == null) {
-    return null
+    return null;
   }
   const newCompileBackendClass = getNewCompileBackendClass(
     projectId,
-    currentCompileBackendClass
-  )
-  if (!newCompileBackendClass) return null
+    currentCompileBackendClass,
+  );
+  if (!newCompileBackendClass) return null;
 
   url = new URL(
-    url.toString().replace(Settings.apis.clsi.url, Settings.apis.clsi_new.url)
-  )
-  url.searchParams.set('compileBackendClass', newCompileBackendClass)
+    url.toString().replace(Settings.apis.clsi.url, Settings.apis.clsi_new.url),
+  );
+  url.searchParams.set("compileBackendClass", newCompileBackendClass);
 
   const clsiServerId =
     await NewBackendCloudClsiCookieManager.promises.getServerId(
       projectId,
       userId,
       compileGroup,
-      newCompileBackendClass
-    )
+      newCompileBackendClass,
+    );
   opts = {
     ...opts,
     headers: {
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
+      Accept: "application/json",
+      "Content-Type": "application/json",
     },
-  }
+  };
 
   if (CLSI_COOKIES_ENABLED) {
     const cookie = new Cookie({
       key: Settings.clsiCookie.key,
       value: clsiServerId,
-    })
-    opts.headers.Cookie = cookie.cookieString()
+    });
+    opts.headers.Cookie = cookie.cookieString();
   }
 
-  const timer = new Metrics.Timer('compile.newBackend')
+  const timer = new Metrics.Timer("compile.newBackend");
 
-  let response, body
+  let response, body;
   try {
-    ;({ body, response } = await fetchStringWithResponse(url, opts))
+    ({ body, response } = await fetchStringWithResponse(url, opts));
   } catch (err) {
-    throw OError.tag(err, 'error making request to new CLSI', {
+    throw OError.tag(err, "error making request to new CLSI", {
       userId,
       projectId,
-    })
+    });
   }
 
-  let json
+  let json;
   try {
-    json = JSON.parse(body)
+    json = JSON.parse(body);
   } catch (err) {
     // Some responses are empty. Ignore JSON parsing errors
   }
-  timer.done()
-  let newClsiServerId
+  timer.done();
+  let newClsiServerId;
   if (CLSI_COOKIES_ENABLED) {
-    newClsiServerId = getClsiServerIdFromResponse(response)
+    newClsiServerId = getClsiServerIdFromResponse(response);
     await NewBackendCloudClsiCookieManager.promises.setServerId(
       projectId,
       userId,
       compileGroup,
       newCompileBackendClass,
       newClsiServerId,
-      clsiServerId
-    )
+      clsiServerId,
+    );
   }
   return {
     response,
     body: json,
     newCompileBackendClass,
     newClsiServerId: newClsiServerId || clsiServerId,
-  }
+  };
 }
 
 async function _getCompilerUrl(
@@ -623,20 +623,20 @@ async function _getCompilerUrl(
   compileGroup,
   projectId,
   userId,
-  action
+  action,
 ) {
-  const { baseUrl } = await WorkerRegistry.promises.resolveBaseUrl(projectId)
-  const u = new URL(baseUrl || Settings.apis.clsi.url)
-  u.pathname = `/project/${projectId}`
+  const { baseUrl } = await WorkerRegistry.promises.resolveBaseUrl(projectId);
+  const u = new URL(baseUrl || Settings.apis.clsi.url);
+  u.pathname = `/project/${projectId}`;
   if (userId != null) {
-    u.pathname += `/user/${userId}`
+    u.pathname += `/user/${userId}`;
   }
   if (action != null) {
-    u.pathname += `/${action}`
+    u.pathname += `/${action}`;
   }
-  u.searchParams.set('compileBackendClass', compileBackendClass)
-  u.searchParams.set('compileGroup', compileGroup)
-  return u
+  u.searchParams.set("compileBackendClass", compileBackendClass);
+  u.searchParams.set("compileGroup", compileGroup);
+  return u;
 }
 
 async function _postToClsi(
@@ -644,20 +644,20 @@ async function _postToClsi(
   userId,
   req,
   compileBackendClass,
-  compileGroup
+  compileGroup,
 ) {
   const url = await _getCompilerUrl(
     compileBackendClass,
     compileGroup,
     projectId,
     userId,
-    'compile'
-  )
+    "compile",
+  );
   const opts = {
     json: req,
-    method: 'POST',
+    method: "POST",
     signal: AbortSignal.timeout(COMPILE_REQUEST_TIMEOUT_MS),
-  }
+  };
   try {
     const { body, clsiServerId } = await _makeRequest(
       projectId,
@@ -665,73 +665,73 @@ async function _postToClsi(
       compileGroup,
       compileBackendClass,
       url,
-      opts
-    )
-    return { response: body, clsiServerId }
+      opts,
+    );
+    return { response: body, clsiServerId };
   } catch (err) {
     if (err instanceof RequestFailedError) {
       if (err.response.status === 413) {
-        return { response: { compile: { status: 'project-too-large' } } }
+        return { response: { compile: { status: "project-too-large" } } };
       } else if (err.response.status === 409) {
         try {
-          const body = JSON.parse(err.body || '{}')
-          if (body.compile?.status === 'missing-updates') {
-            return { response: body }
+          const body = JSON.parse(err.body || "{}");
+          if (body.compile?.status === "missing-updates") {
+            return { response: body };
           }
         } catch {}
-        return { response: { compile: { status: 'conflict' } } }
+        return { response: { compile: { status: "conflict" } } };
       } else if (err.response.status === 423) {
-        return { response: { compile: { status: 'compile-in-progress' } } }
+        return { response: { compile: { status: "compile-in-progress" } } };
       } else if (err.response.status === 502 || err.response.status === 503) {
         enableCompileFromCacheUntil =
-          Date.now() + ENABLE_COMPILE_FROM_CACHE_ON_503_MS
-        return { response: { compile: { status: 'unavailable' } } }
+          Date.now() + ENABLE_COMPILE_FROM_CACHE_ON_503_MS;
+        return { response: { compile: { status: "unavailable" } } };
       } else if (err.response.status === 504) {
-        return { response: { compile: { status: 'timedout' } } }
+        return { response: { compile: { status: "timedout" } } };
       } else {
-        throw new OError('CLSI returned non-success code', {
+        throw new OError("CLSI returned non-success code", {
           projectId,
           userId,
           compileOptions: req.compile.options,
           rootResourcePath: req.compile.rootResourcePath,
           clsiResponse: err.body,
           statusCode: err.response.status,
-        })
+        });
       }
     } else {
       throw new OError(
-        'failed to make request to CLSI',
+        "failed to make request to CLSI",
         {
           projectId,
           userId,
           compileOptions: req.compile.options,
           rootResourcePath: req.compile.rootResourcePath,
         },
-        err
-      )
+        err,
+      );
     }
   }
 }
 
 function _parseOutputFiles(projectId, rawOutputFiles = []) {
-  const outputFiles = []
+  const outputFiles = [];
   for (const file of rawOutputFiles) {
     const f = {
       path: file.path, // the clsi is now sending this to web
       url: new URL(file.url).pathname, // the location of the file on the clsi, excluding the host part
       type: file.type,
       build: file.build,
+    };
+    if (file.path === "output.pdf") {
+      f.contentId = file.contentId;
+      f.ranges = file.ranges || [];
+      f.size = file.size;
+      f.startXRefTable = file.startXRefTable;
+      f.createdAt = new Date();
     }
-    if (file.path === 'output.pdf') {
-      f.contentId = file.contentId
-      f.ranges = file.ranges || []
-      f.size = file.size
-      f.startXRefTable = file.startXRefTable
-      f.createdAt = new Date()
-    }
-    outputFiles.push(f)
+    outputFiles.push(f);
   }
-  return outputFiles
+  return outputFiles;
 }
 
 async function _buildRequest(project, projectId, userId, options) {
@@ -739,21 +739,21 @@ async function _buildRequest(project, projectId, userId, options) {
     project = await ProjectGetter.promises.getProject(projectId, {
       compiler: 1,
       imageName: 1,
-      'overleaf.history.id': 1,
+      "overleaf.history.id": 1,
       ...(options.compileFromHistory ? {} : { rootDoc_id: 1, rootFolder: 1 }),
-    })
+    });
   }
   if (project == null) {
-    throw new Errors.NotFoundError(`project does not exist: ${projectId}`)
+    throw new Errors.NotFoundError(`project does not exist: ${projectId}`);
   }
   if (!VALID_COMPILERS.includes(project.compiler)) {
-    project.compiler = Settings.defaultLatexCompiler
+    project.compiler = Settings.defaultLatexCompiler;
   }
-  const historyId = project.overleaf.history.id
-  let { baseHistoryVersion } = options
+  const historyId = project.overleaf.history.id;
+  let { baseHistoryVersion } = options;
 
   if (options.compileFromHistory && !baseHistoryVersion) {
-    baseHistoryVersion = await getBaseHistoryVersion(projectId, userId)
+    baseHistoryVersion = await getBaseHistoryVersion(projectId, userId);
   }
 
   if (options.compileFromHistory && baseHistoryVersion === -1) {
@@ -763,18 +763,18 @@ async function _buildRequest(project, projectId, userId, options) {
         projectId,
         historyId,
         options,
-        project
-      )
+        project,
+      );
     } catch (err) {
       logger.warn(
         { err, projectId, historyId },
-        'failed to compose history-full request'
-      )
+        "failed to compose history-full request",
+      );
       // fall back to old compile mode
       return await _buildRequest(null, projectId, userId, {
         ...options,
         compileFromHistory: false,
-      })
+      });
     }
   } else if (options.compileFromHistory) {
     // incremental sync
@@ -784,70 +784,70 @@ async function _buildRequest(project, projectId, userId, options) {
         historyId,
         options,
         project,
-        baseHistoryVersion
-      )
+        baseHistoryVersion,
+      );
     } catch (err) {
       logger.warn(
         { err, projectId, historyId, baseHistoryVersion },
-        'failed to compose history-incremental request'
-      )
+        "failed to compose history-incremental request",
+      );
       // fall back to old compile mode
       return await _buildRequest(null, projectId, userId, {
         ...options,
         compileFromHistory: false,
-      })
+      });
     }
   }
 
   if (options.incrementalCompilesEnabled || options.syncType != null) {
     // new way, either incremental or full
-    const timer = new Metrics.Timer('editor.compile-getdocs-redis')
-    let projectStateHash, docUpdaterDocs
+    const timer = new Metrics.Timer("editor.compile-getdocs-redis");
+    let projectStateHash, docUpdaterDocs;
     try {
-      ;({ projectStateHash, docs: docUpdaterDocs } =
-        await getContentFromDocUpdaterIfMatch(projectId, project, options))
+      ({ projectStateHash, docs: docUpdaterDocs } =
+        await getContentFromDocUpdaterIfMatch(projectId, project, options));
     } catch (err) {
-      logger.error({ err, projectId }, 'error checking project state')
+      logger.error({ err, projectId }, "error checking project state");
       // note: we don't bail out when there's an error getting
       // incremental files from the docupdater, we just fall back
       // to a normal compile below
     }
-    timer.done()
+    timer.done();
     // see if we can send an incremental update to the CLSI
-    if (docUpdaterDocs != null && options.syncType !== 'full') {
-      Metrics.inc('compile-from-redis')
+    if (docUpdaterDocs != null && options.syncType !== "full") {
+      Metrics.inc("compile-from-redis");
       return _buildRequestFromDocupdater(
         projectId,
         options,
         project,
         projectStateHash,
-        docUpdaterDocs
-      )
+        docUpdaterDocs,
+      );
     } else {
-      Metrics.inc('compile-from-mongo')
+      Metrics.inc("compile-from-mongo");
       return await _buildRequestFromMongo(
         projectId,
         options,
         project,
-        projectStateHash
-      )
+        projectStateHash,
+      );
     }
   } else {
     // old way, always from mongo
-    const timer = new Metrics.Timer('editor.compile-getdocs-mongo')
-    const { docs, files } = await _getContentFromMongo(projectId)
-    timer.done()
-    return _finaliseRequest(projectId, options, project, docs, files)
+    const timer = new Metrics.Timer("editor.compile-getdocs-mongo");
+    const { docs, files } = await _getContentFromMongo(projectId);
+    timer.done();
+    return _finaliseRequest(projectId, options, project, docs, files);
   }
 }
 
 async function getContentFromDocUpdaterIfMatch(projectId, project, options) {
-  const projectStateHash = ClsiStateManager.computeHash(project, options)
+  const projectStateHash = ClsiStateManager.computeHash(project, options);
   const docs = await DocumentUpdaterHandler.promises.getProjectDocsIfMatch(
     projectId,
-    projectStateHash
-  )
-  return { projectStateHash, docs }
+    projectStateHash,
+  );
+  return { projectStateHash, docs };
 }
 
 async function getOutputFileStream(
@@ -855,30 +855,30 @@ async function getOutputFileStream(
   userId,
   clsiServerId,
   buildId,
-  outputFilePath
+  outputFilePath,
 ) {
   const url = getOutputFileURL(
     projectId,
     userId,
     buildId,
     outputFilePath,
-    clsiServerId
-  )
+    clsiServerId,
+  );
   try {
     const stream = await fetchStream(url, {
       signal: AbortSignal.timeout(OUTPUT_FILE_TIMEOUT_MS),
-    })
-    return stream
+    });
+    return stream;
   } catch (err) {
     throw new Errors.OutputFileFetchFailedError(
-      'failed to fetch output file from CLSI',
+      "failed to fetch output file from CLSI",
       {
         projectId,
         userId,
         url,
         status: err.response?.status,
-      }
-    )
+      },
+    );
   }
 }
 
@@ -894,7 +894,7 @@ function _rawChangeOperationsFromChanges(changes) {
   // omit origin (optional)
   // omit projectVersion (optional)
   // omit v2DocVersions (optional)
-  return changes.map(change => change.operations)
+  return changes.map((change) => change.operations);
 }
 
 /**
@@ -903,25 +903,25 @@ function _rawChangeOperationsFromChanges(changes) {
  * @private
  */
 function _collectGlobalBlobs(rawChangeOperations) {
-  const globalBlobs = new Set()
+  const globalBlobs = new Set();
   for (const operations of rawChangeOperations) {
     for (const operation of operations) {
-      const hash = operation?.file?.hash
+      const hash = operation?.file?.hash;
       if (hash && HistoryManager.isGlobalBlob(hash)) {
-        globalBlobs.add(hash)
+        globalBlobs.add(hash);
       }
     }
   }
-  return globalBlobs
+  return globalBlobs;
 }
 
 function collectGlobalBlobsFromRawSnapshot(rawSnapshot, globalBlobs) {
   for (const { hash, rangesHash } of Object.values(rawSnapshot.files)) {
     if (hash && HistoryManager.isGlobalBlob(hash)) {
-      globalBlobs.add(hash)
+      globalBlobs.add(hash);
     }
     if (rangesHash && HistoryManager.isGlobalBlob(rangesHash)) {
-      globalBlobs.add(rangesHash)
+      globalBlobs.add(rangesHash);
     }
   }
 }
@@ -930,9 +930,9 @@ async function _buildRequestFromHistoryFull(
   projectId,
   historyId,
   options,
-  project
+  project,
 ) {
-  await HistoryManager.promises.flushProject(projectId)
+  await HistoryManager.promises.flushProject(projectId);
   const [
     {
       chunk: {
@@ -944,20 +944,20 @@ async function _buildRequestFromHistoryFull(
   ] = await Promise.all([
     HistoryManager.promises.getLatestHistoryWithHistoryId(historyId),
     HistoryManager.promises.ensureNoResyncPending(projectId),
-  ])
-  const rawChangeOperations = _rawChangeOperationsFromChanges(rawChanges)
-  const globalBlobs = _collectGlobalBlobs(rawChangeOperations)
-  collectGlobalBlobsFromRawSnapshot(rawSnapshot, globalBlobs)
+  ]);
+  const rawChangeOperations = _rawChangeOperationsFromChanges(rawChanges);
+  const globalBlobs = _collectGlobalBlobs(rawChangeOperations);
+  collectGlobalBlobsFromRawSnapshot(rawSnapshot, globalBlobs);
   options = {
     ...options,
-    syncType: 'history-full',
+    syncType: "history-full",
     historyId,
     baseHistoryVersion: startVersion,
     rawSnapshot,
     rawChangeOperations,
     globalBlobs: Array.from(globalBlobs),
-  }
-  return _finaliseRequest(projectId, options, project, [], [])
+  };
+  return _finaliseRequest(projectId, options, project, [], []);
 }
 
 async function _buildRequestFromHistoryIncremental(
@@ -965,22 +965,22 @@ async function _buildRequestFromHistoryIncremental(
   historyId,
   options,
   project,
-  baseHistoryVersion
+  baseHistoryVersion,
 ) {
-  await HistoryManager.promises.flushProject(projectId)
-  const rawChangeOperations = []
-  let hasMore = true
-  let since = baseHistoryVersion
-  let size = 0
+  await HistoryManager.promises.flushProject(projectId);
+  const rawChangeOperations = [];
+  let hasMore = true;
+  let since = baseHistoryVersion;
+  let size = 0;
   while (hasMore) {
-    let changes
-    ;[{ changes, hasMore } /* resyncPending throws */] = await Promise.all([
+    let changes;
+    [{ changes, hasMore } /* resyncPending throws */] = await Promise.all([
       HistoryManager.promises.getChangesWithHistoryId(historyId, { since }),
       HistoryManager.promises.ensureNoResyncPending(projectId),
-    ])
-    since += changes.length
-    const newRawChangeOperations = _rawChangeOperationsFromChanges(changes)
-    size += Buffer.from(JSON.stringify(newRawChangeOperations)).byteLength
+    ]);
+    since += changes.length;
+    const newRawChangeOperations = _rawChangeOperationsFromChanges(changes);
+    size += Buffer.from(JSON.stringify(newRawChangeOperations)).byteLength;
     if (size > 6.5 * 1024 * 1024) {
       // clsi has a payload limit of 7MiB. Do not send too many operations.
       // Fall back to sending the latest snapshot instead.
@@ -989,24 +989,24 @@ async function _buildRequestFromHistoryIncremental(
           projectId,
           historyId,
           options,
-          project
-        )
+          project,
+        );
       } catch (err) {
-        throw OError.tag(err, 'upgrade to history-full failed', { size })
+        throw OError.tag(err, "upgrade to history-full failed", { size });
       }
     }
-    rawChangeOperations.push(...newRawChangeOperations)
+    rawChangeOperations.push(...newRawChangeOperations);
   }
-  const globalBlobs = _collectGlobalBlobs(rawChangeOperations)
+  const globalBlobs = _collectGlobalBlobs(rawChangeOperations);
   options = {
     ...options,
-    syncType: 'history-incremental',
+    syncType: "history-incremental",
     historyId,
     baseHistoryVersion,
     rawChangeOperations,
     globalBlobs: Array.from(globalBlobs),
-  }
-  return _finaliseRequest(projectId, options, project, [], [])
+  };
+  return _finaliseRequest(projectId, options, project, [], []);
 }
 
 function _buildRequestFromDocupdater(
@@ -1014,124 +1014,124 @@ function _buildRequestFromDocupdater(
   options,
   project,
   projectStateHash,
-  docUpdaterDocs
+  docUpdaterDocs,
 ) {
-  const docPath = ProjectEntityHandler.getAllDocPathsFromProject(project)
-  const docs = {}
+  const docPath = ProjectEntityHandler.getAllDocPathsFromProject(project);
+  const docs = {};
   for (const doc of docUpdaterDocs || []) {
-    const path = docPath[doc._id]
-    docs[path] = doc
+    const path = docPath[doc._id];
+    docs[path] = doc;
   }
   // send new docs but not files as those are already on the clsi
-  options = _.clone(options)
-  options.syncType = 'incremental'
-  options.syncState = projectStateHash
+  options = _.clone(options);
+  options.syncType = "incremental";
+  options.syncState = projectStateHash;
   // create stub doc entries for any possible root docs, if not
   // present in the docupdater. This allows finaliseRequest to
   // identify the root doc.
-  const possibleRootDocIds = [options.rootDoc_id, project.rootDoc_id]
+  const possibleRootDocIds = [options.rootDoc_id, project.rootDoc_id];
   for (const rootDocId of possibleRootDocIds) {
     if (rootDocId != null && rootDocId in docPath) {
-      const path = docPath[rootDocId]
+      const path = docPath[rootDocId];
       if (docs[path] == null) {
-        docs[path] = { _id: rootDocId, path }
+        docs[path] = { _id: rootDocId, path };
       }
     }
   }
-  return _finaliseRequest(projectId, options, project, docs, [])
+  return _finaliseRequest(projectId, options, project, docs, []);
 }
 
 async function _buildRequestFromMongo(
   projectId,
   options,
   project,
-  projectStateHash
+  projectStateHash,
 ) {
-  const { docs, files } = await _getContentFromMongo(projectId)
+  const { docs, files } = await _getContentFromMongo(projectId);
   options = {
     ...options,
-    syncType: 'full',
+    syncType: "full",
     syncState: projectStateHash,
-  }
-  return _finaliseRequest(projectId, options, project, docs, files)
+  };
+  return _finaliseRequest(projectId, options, project, docs, files);
 }
 
 async function _getContentFromMongo(projectId) {
-  await DocumentUpdaterHandler.promises.flushProjectToMongo(projectId)
-  const docs = await ProjectEntityHandler.promises.getAllDocs(projectId)
-  const files = await ProjectEntityHandler.promises.getAllFiles(projectId)
-  return { docs, files }
+  await DocumentUpdaterHandler.promises.flushProjectToMongo(projectId);
+  const docs = await ProjectEntityHandler.promises.getAllDocs(projectId);
+  const files = await ProjectEntityHandler.promises.getAllFiles(projectId);
+  return { docs, files };
 }
 
 function _finaliseRequest(projectId, options, project, docs, files) {
-  const resources = []
-  let flags
-  let rootResourcePath = options.rootResourcePath
-  let rootResourcePathOverride = null
-  let hasMainFile = false
-  let numberOfDocsInProject = 0
+  const resources = [];
+  let flags;
+  let rootResourcePath = options.rootResourcePath;
+  let rootResourcePathOverride = null;
+  let hasMainFile = false;
+  let numberOfDocsInProject = 0;
 
   for (let path in docs) {
-    const doc = docs[path]
-    path = path.replace(/^\//, '') // Remove leading /
-    numberOfDocsInProject++
+    const doc = docs[path];
+    path = path.replace(/^\//, ""); // Remove leading /
+    numberOfDocsInProject++;
     if (doc.lines != null) {
       // add doc to resources unless it is just a stub entry
       resources.push({
         path,
-        content: doc.lines.join('\n'),
-      })
+        content: doc.lines.join("\n"),
+      });
     }
     if (
       project.rootDoc_id != null &&
       doc._id.toString() === project.rootDoc_id.toString()
     ) {
-      rootResourcePath = path
+      rootResourcePath = path;
     }
     if (
       options.rootDoc_id != null &&
       doc._id.toString() === options.rootDoc_id.toString()
     ) {
-      rootResourcePathOverride = path
+      rootResourcePathOverride = path;
     }
-    if (path === 'main.tex') {
-      hasMainFile = true
+    if (path === "main.tex") {
+      hasMainFile = true;
     }
   }
 
   if (rootResourcePathOverride != null) {
-    rootResourcePath = rootResourcePathOverride
+    rootResourcePath = rootResourcePathOverride;
   }
   if (rootResourcePath == null) {
     if (hasMainFile) {
-      rootResourcePath = 'main.tex'
+      rootResourcePath = "main.tex";
     } else if (numberOfDocsInProject === 1) {
       // only one file, must be the main document
       for (const path in docs) {
         // Remove leading /
-        rootResourcePath = path.replace(/^\//, '')
+        rootResourcePath = path.replace(/^\//, "");
       }
     } else {
-      throw new OError('no main file specified', { projectId })
+      throw new OError("no main file specified", { projectId });
     }
   }
 
-  const historyId = project.overleaf.history.id
+  const historyId = project.overleaf.history.id;
   if (!historyId) {
-    throw new OError('project does not have a history id', { projectId })
+    throw new OError("project does not have a history id", { projectId });
   }
   for (let path in files) {
-    const file = files[path]
-    path = path.replace(/^\//, '') // Remove leading /
+    const file = files[path];
+    path = path.replace(/^\//, ""); // Remove leading /
     resources.push({
       path,
       url: HistoryManager.getFilestoreBlobURL(historyId, file.hash),
       modified: file.created?.getTime(),
-    })
+    });
   }
 
   if (options.fileLineErrors) {
-    flags = ['-file-line-error']
+    flags = ["-file-line-error"];
   }
 
   return {
@@ -1153,7 +1153,7 @@ function _finaliseRequest(projectId, options, project, docs, files) {
         // Overleaf alpha/staff users get compileGroup=alpha (via getProjectCompileLimits in CompileManager), enroll them into the premium rollout of clsi-cache.
         compileFromClsiCache:
           // enable for premium compiles
-          (['alpha', 'priority'].includes(options.compileGroup) ||
+          (["alpha", "priority"].includes(options.compileGroup) ||
             // enable for free for short period when we saw low capacity
             enableCompileFromCacheUntil > Date.now()) &&
           options.compileFromClsiCache,
@@ -1173,7 +1173,7 @@ function _finaliseRequest(projectId, options, project, docs, files) {
       rootResourcePath,
       resources,
     },
-  }
+  };
 }
 
 async function buildDocumentConversionRequest(projectId, userId, options) {
@@ -1183,26 +1183,26 @@ async function buildDocumentConversionRequest(projectId, userId, options) {
     populateClsiCache: true,
     // Read from mongo directly, skip redis.
     incrementalCompilesEnabled: false,
-  })
+  });
 }
 
 async function wordCount(projectId, userId, file, limits, clsiserverid) {
-  const { compileBackendClass, compileGroup } = limits
-  const req = await _buildRequest(null, projectId, userId, limits)
-  const filename = file || req.compile.rootResourcePath
+  const { compileBackendClass, compileGroup } = limits;
+  const req = await _buildRequest(null, projectId, userId, limits);
+  const filename = file || req.compile.rootResourcePath;
   const url = await _getCompilerUrl(
     compileBackendClass,
     compileGroup,
     projectId,
     userId,
-    'wordcount'
-  )
-  url.searchParams.set('file', filename)
-  url.searchParams.set('image', req.compile.options.imageName)
+    "wordcount",
+  );
+  url.searchParams.set("file", filename);
+  url.searchParams.set("image", req.compile.options.imageName);
 
   const opts = {
-    method: 'GET',
-  }
+    method: "GET",
+  };
   const { body } = await _makeRequestWithClsiServerId(
     projectId,
     userId,
@@ -1210,9 +1210,9 @@ async function wordCount(projectId, userId, file, limits, clsiserverid) {
     compileBackendClass,
     url,
     opts,
-    clsiserverid
-  )
-  return body
+    clsiserverid,
+  );
+  return body;
 }
 
 async function syncTeX(
@@ -1225,27 +1225,27 @@ async function syncTeX(
     imageName,
     validatedOptions,
     clsiServerId,
-  }
+  },
 ) {
-  const { compileBackendClass, compileGroup } = limits
+  const { compileBackendClass, compileGroup } = limits;
   const url = await _getCompilerUrl(
     compileBackendClass,
     compileGroup,
     projectId,
     userId,
-    `sync/${direction}`
-  )
+    `sync/${direction}`,
+  );
   url.searchParams.set(
-    'compileFromClsiCache',
-    compileFromClsiCache && ['alpha', 'priority'].includes(compileGroup)
-  )
-  url.searchParams.set('imageName', imageName)
+    "compileFromClsiCache",
+    compileFromClsiCache && ["alpha", "priority"].includes(compileGroup),
+  );
+  url.searchParams.set("imageName", imageName);
   for (const [key, value] of Object.entries(validatedOptions)) {
-    url.searchParams.set(key, value)
+    url.searchParams.set(key, value);
   }
   const opts = {
-    method: 'GET',
-  }
+    method: "GET",
+  };
   try {
     const { body } = await _makeRequestWithClsiServerId(
       projectId,
@@ -1254,51 +1254,51 @@ async function syncTeX(
       compileBackendClass,
       url,
       opts,
-      clsiServerId
-    )
-    return body
+      clsiServerId,
+    );
+    return body;
   } catch (err) {
     if (err instanceof RequestFailedError && err.response.status === 404) {
-      throw new Errors.NotFoundError()
+      throw new Errors.NotFoundError();
     }
-    throw err
+    throw err;
   }
 }
 
 function getClsiServerIdFromResponse(response) {
-  const setCookieHeaders = response.headers.raw()['set-cookie'] ?? []
+  const setCookieHeaders = response.headers.raw()["set-cookie"] ?? [];
   for (const header of setCookieHeaders) {
-    const cookie = Cookie.parse(header)
+    const cookie = Cookie.parse(header);
     if (cookie.key === Settings.clsiCookie.key) {
-      return cookie.value
+      return cookie.value;
     }
   }
-  return null
+  return null;
 }
 
 export default {
   collectGlobalBlobsFromRawSnapshot,
   _finaliseRequest,
   sendRequest: callbackifyMultiResult(sendRequest, [
-    'status',
-    'outputFiles',
-    'clsiServerId',
-    'validationProblems',
-    'stats',
-    'timings',
-    'outputUrlPrefix',
-    'buildId',
-    'clsiCacheShard',
-    'instanceType',
+    "status",
+    "outputFiles",
+    "clsiServerId",
+    "validationProblems",
+    "stats",
+    "timings",
+    "outputUrlPrefix",
+    "buildId",
+    "clsiCacheShard",
+    "instanceType",
   ]),
   sendExternalRequest: callbackifyMultiResult(sendExternalRequest, [
-    'status',
-    'outputFiles',
-    'clsiServerId',
-    'validationProblems',
-    'stats',
-    'timings',
-    'outputUrlPrefix',
+    "status",
+    "outputFiles",
+    "clsiServerId",
+    "validationProblems",
+    "stats",
+    "timings",
+    "outputUrlPrefix",
   ]),
   stopCompile: callbackify(stopCompile),
   deleteAuxFiles: callbackify(deleteAuxFiles),
@@ -1317,4 +1317,4 @@ export default {
     syncTeX,
     buildDocumentConversionRequest,
   },
-}
+};

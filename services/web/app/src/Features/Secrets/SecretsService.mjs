@@ -49,7 +49,7 @@ async function listSecrets(projectId) {
     .sort({ key: 1 })
     .lean()
     .exec();
-  return secrets.map(s => ({
+  return secrets.map((s) => ({
     key: s.key,
     createdAt: s.createdAt,
     updatedAt: s.updatedAt,
@@ -58,7 +58,9 @@ async function listSecrets(projectId) {
 }
 
 async function setSecret(projectId, key, value, userId) {
-  const cleanKey = String(key || "").trim().toUpperCase();
+  const cleanKey = String(key || "")
+    .trim()
+    .toUpperCase();
   if (!KEY_RE.test(cleanKey)) {
     throw new OError("invalid secret key", {
       hint: "uppercase letters, digits and underscores, starting with a letter",
@@ -91,8 +93,13 @@ async function setSecret(projectId, key, value, userId) {
 }
 
 async function deleteSecret(projectId, key, userId) {
-  const cleanKey = String(key || "").trim().toUpperCase();
-  const res = await ProjectSecret.deleteOne({ projectId, key: cleanKey }).exec();
+  const cleanKey = String(key || "")
+    .trim()
+    .toUpperCase();
+  const res = await ProjectSecret.deleteOne({
+    projectId,
+    key: cleanKey,
+  }).exec();
   if (res.deletedCount === 0) {
     throw new OError("secret not found", { key: cleanKey });
   }

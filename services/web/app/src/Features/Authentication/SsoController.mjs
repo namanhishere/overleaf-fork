@@ -21,8 +21,9 @@ async function tryLdapLogin(req, res, next) {
 
   let providers = [];
   try {
-    providers = (await SsoManager.promises.listProviders({ enabledOnly: true }))
-      .filter(p => p.type === "ldap");
+    providers = (
+      await SsoManager.promises.listProviders({ enabledOnly: true })
+    ).filter((p) => p.type === "ldap");
   } catch {
     return next();
   }
@@ -37,10 +38,7 @@ async function tryLdapLogin(req, res, next) {
         password,
       );
     } catch (err) {
-      logger.warn(
-        { err, slug: provider.slug },
-        "ldap login: directory error",
-      );
+      logger.warn({ err, slug: provider.slug }, "ldap login: directory error");
       continue;
     }
     if (identity == null) continue;
@@ -66,7 +64,7 @@ async function tryLdapLogin(req, res, next) {
       );
 
       await new Promise((resolve, reject) =>
-        req.session.regenerate(err => (err ? reject(err) : resolve())),
+        req.session.regenerate((err) => (err ? reject(err) : resolve())),
       );
       req.session.passport = {
         user: {
@@ -82,7 +80,7 @@ async function tryLdapLogin(req, res, next) {
       };
       req.session.analyticsId = user.analyticsId || String(user._id);
       await new Promise((resolve, reject) =>
-        req.session.save(err => (err ? reject(err) : resolve())),
+        req.session.save((err) => (err ? reject(err) : resolve())),
       );
 
       await AuditLogManager.promises.recordAudit({
@@ -192,7 +190,7 @@ async function callback(req, res) {
     // The stored shape must mirror AuthenticationController.serializeUser's
     // light user (SessionManager reads session.passport.user._id).
     await new Promise((resolve, reject) =>
-      req.session.regenerate(err => (err ? reject(err) : resolve())),
+      req.session.regenerate((err) => (err ? reject(err) : resolve())),
     );
     req.session.passport = {
       user: {
@@ -208,7 +206,7 @@ async function callback(req, res) {
     };
     req.session.analyticsId = user.analyticsId || String(user._id);
     await new Promise((resolve, reject) =>
-      req.session.save(err => (err ? reject(err) : resolve())),
+      req.session.save((err) => (err ? reject(err) : resolve())),
     );
 
     await AuditLogManager.promises.recordAudit({

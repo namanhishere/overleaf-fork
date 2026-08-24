@@ -50,9 +50,8 @@ async function removeReviewer(req, res) {
 
 // GET /project/:Project_id/api/git — clone URL and integration status
 async function getGitInfo(req, res) {
-  const { default: GitIntegrationService } = await import(
-    "../GitIntegration/GitIntegrationService.mjs"
-  );
+  const { default: GitIntegrationService } =
+    await import("../GitIntegration/GitIntegrationService.mjs");
   const info = await GitIntegrationService.promises.getGitInfo(
     req.params.Project_id,
     _userId(req),
@@ -63,7 +62,8 @@ async function getGitInfo(req, res) {
 // POST /project/:Project_id/api/review/summarize — AI summary of comments
 async function summarizeComments(req, res) {
   try {
-    const AiAgentService = (await import("../AiAgent/AiAgentService.mjs")).default;
+    const AiAgentService = (await import("../AiAgent/AiAgentService.mjs"))
+      .default;
     const result = await AiAgentService.promises.summarizeComments(
       req.params.Project_id,
     );

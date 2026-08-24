@@ -12,7 +12,16 @@ export const AuditEntrySchema = new Schema(
     action: { type: String, required: true },
     targetType: {
       type: String,
-      enum: ["user", "project", "job", "org", "settings", "auth", "sso-provider", "compilation-profile"],
+      enum: [
+        "user",
+        "project",
+        "job",
+        "org",
+        "settings",
+        "auth",
+        "sso-provider",
+        "compilation-profile",
+      ],
       required: true,
     },
     targetId: { type: String, required: true },

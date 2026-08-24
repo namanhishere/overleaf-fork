@@ -1,89 +1,96 @@
-import { createRoot } from 'react-dom/client'
-import { useEffect, useState } from 'react'
-import { getJSON, postJSON } from '@/infrastructure/fetch-json'
+import { createRoot } from "react-dom/client";
+import { useEffect, useState } from "react";
+import { getJSON, postJSON } from "@/infrastructure/fetch-json";
 
 type CollectionBackup = {
-  name: string
-  count: number
-  file: string
-  sizeBytes: number
-}
+  name: string;
+  count: number;
+  file: string;
+  sizeBytes: number;
+};
 
 type BackupRun = {
-  runId: string
-  label: string
-  status: 'running' | 'complete' | 'failed'
-  startedAt: string
-  finishedAt: string | null
-  collections: CollectionBackup[]
-  error: string | null
+  runId: string;
+  label: string;
+  status: "running" | "complete" | "failed";
+  startedAt: string;
+  finishedAt: string | null;
+  collections: CollectionBackup[];
+  error: string | null;
   restoreTest: {
-    at: string
-    targetDb: string
-    ok: boolean
-    results: { name: string; expected: number; restored: number; ok: boolean }[]
-  } | null
-  onDisk: boolean
-}
+    at: string;
+    targetDb: string;
+    ok: boolean;
+    results: {
+      name: string;
+      expected: number;
+      restored: number;
+      ok: boolean;
+    }[];
+  } | null;
+  onDisk: boolean;
+};
 
 function formatBytes(n: number) {
-  if (n >= 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`
-  if (n >= 1024) return `${(n / 1024).toFixed(0)} KB`
-  return `${n} B`
+  if (n >= 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;
+  if (n >= 1024) return `${(n / 1024).toFixed(0)} KB`;
+  return `${n} B`;
 }
 
 function BackupsDashboard() {
-  const [backups, setBackups] = useState<BackupRun[]>([])
-  const [label, setLabel] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [message, setMessage] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [expanded, setExpanded] = useState<string | null>(null)
+  const [backups, setBackups] = useState<BackupRun[]>([]);
+  const [label, setLabel] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<string | null>(null);
 
   async function refresh() {
-    setError(null)
+    setError(null);
     try {
-      const data = await getJSON<{ backups: BackupRun[] }>('/admin/api/backups')
-      setBackups(data.backups)
+      const data = await getJSON<{ backups: BackupRun[] }>(
+        "/admin/api/backups",
+      );
+      setBackups(data.backups);
     } catch (err) {
-      setError(String((err as Error).message))
+      setError(String((err as Error).message));
     }
   }
 
   useEffect(() => {
-    refresh()
-  }, [])
+    refresh();
+  }, []);
 
   async function runBackup(e: React.FormEvent) {
-    e.preventDefault()
-    setBusy(true)
-    setError(null)
-    setMessage(null)
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    setMessage(null);
     try {
-      await postJSON('/admin/api/backups', { body: { label } })
-      setMessage('Backup completed.')
-      setLabel('')
-      refresh()
+      await postJSON("/admin/api/backups", { body: { label } });
+      setMessage("Backup completed.");
+      setLabel("");
+      refresh();
     } catch (err) {
-      setError(String((err as Error).message))
+      setError(String((err as Error).message));
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
   async function restoreTest(runId: string) {
-    setError(null)
-    setMessage(null)
+    setError(null);
+    setMessage(null);
     try {
       const res = await postJSON(`/admin/api/backups/${runId}/restore-test`, {
         body: {},
-      })
+      });
       setMessage(
-        `Restore test ${res.ok ? 'passed' : 'FAILED'} — restored into ${res.targetDb}.`
-      )
-      refresh()
+        `Restore test ${res.ok ? "passed" : "FAILED"} — restored into ${res.targetDb}.`,
+      );
+      refresh();
     } catch (err) {
-      setError(String((err as Error).message))
+      setError(String((err as Error).message));
     }
   }
 
@@ -91,16 +98,15 @@ function BackupsDashboard() {
     <div>
       <h1>Backups</h1>
       <p>
-        <a href="/admin">Back to admin</a> · <a href="/admin/users">Users</a> ·{' '}
-        <a href="/admin/jobs">Jobs</a> ·{' '}
-        <a href="/admin/storage">Storage</a> ·{' '}
+        <a href="/admin">Back to admin</a> · <a href="/admin/users">Users</a> ·{" "}
+        <a href="/admin/jobs">Jobs</a> · <a href="/admin/storage">Storage</a> ·{" "}
         <a href="/admin/audit">Audit</a>
       </p>
       <p>
         Logical backup of all database collections into gzip-compressed JSON
         archives. Run a restore test to verify a backup can be replayed into a
-        scratch database with document counts verified against the manifest.
-        For very large deployments, binary <code>mongodump</code> remains the
+        scratch database with document counts verified against the manifest. For
+        very large deployments, binary <code>mongodump</code> remains the
         recommended production path.
       </p>
       {error ? <p className="text-danger">{error}</p> : null}
@@ -111,10 +117,10 @@ function BackupsDashboard() {
           type="text"
           value={label}
           placeholder="Label (optional)"
-          onChange={e => setLabel(e.target.value)}
-        />{' '}
+          onChange={(e) => setLabel(e.target.value)}
+        />{" "}
         <button type="submit" className="btn btn-primary" disabled={busy}>
-          {busy ? 'Running…' : 'Run backup now'}
+          {busy ? "Running…" : "Run backup now"}
         </button>
       </form>
 
@@ -132,21 +138,21 @@ function BackupsDashboard() {
           </tr>
         </thead>
         <tbody>
-          {backups.map(b => (
+          {backups.map((b) => (
             <tr key={b.runId}>
               <td>
                 <a
                   href="#"
-                  onClick={e => {
-                    e.preventDefault()
-                    setExpanded(expanded === b.runId ? null : b.runId)
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setExpanded(expanded === b.runId ? null : b.runId);
                   }}
                 >
                   {b.runId.slice(7, 31)}
                 </a>
-                {!b.onDisk ? ' (files missing)' : ''}
+                {!b.onDisk ? " (files missing)" : ""}
               </td>
-              <td>{b.label || '—'}</td>
+              <td>{b.label || "—"}</td>
               <td>{b.status}</td>
               <td>{new Date(b.startedAt).toLocaleString()}</td>
               <td>{b.collections.length}</td>
@@ -154,11 +160,11 @@ function BackupsDashboard() {
                 {b.restoreTest
                   ? b.restoreTest.ok
                     ? `✓ passed`
-                    : '✗ failed'
-                  : '—'}
+                    : "✗ failed"
+                  : "—"}
               </td>
               <td>
-                {b.status === 'complete' && b.onDisk ? (
+                {b.status === "complete" && b.onDisk ? (
                   <button
                     className="btn btn-xs btn-default"
                     onClick={() => restoreTest(b.runId)}
@@ -179,11 +185,14 @@ function BackupsDashboard() {
 
       {expanded
         ? backups
-            .filter(b => b.runId === expanded)
-            .map(b => (
+            .filter((b) => b.runId === expanded)
+            .map((b) => (
               <div key={b.runId}>
                 <h3>Collections — {b.runId.slice(7, 31)}</h3>
-                <table className="table table-condensed" style={{ maxWidth: 640 }}>
+                <table
+                  className="table table-condensed"
+                  style={{ maxWidth: 640 }}
+                >
                   <thead>
                     <tr>
                       <th>Collection</th>
@@ -193,7 +202,7 @@ function BackupsDashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {b.collections.map(c => (
+                    {b.collections.map((c) => (
                       <tr key={c.name}>
                         <td>
                           <code>{c.name}</code>
@@ -214,8 +223,8 @@ function BackupsDashboard() {
                 </table>
                 {b.restoreTest ? (
                   <p>
-                    Last restore test: {b.restoreTest.ok ? 'passed' : 'failed'}{' '}
-                    at {new Date(b.restoreTest.at).toLocaleString()} into{' '}
+                    Last restore test: {b.restoreTest.ok ? "passed" : "failed"}{" "}
+                    at {new Date(b.restoreTest.at).toLocaleString()} into{" "}
                     <code>{b.restoreTest.targetDb}</code>.
                   </p>
                 ) : null}
@@ -223,10 +232,10 @@ function BackupsDashboard() {
             ))
         : null}
     </div>
-  )
+  );
 }
 
-const element = document.getElementById('admin-backups-root')
+const element = document.getElementById("admin-backups-root");
 if (element) {
-  createRoot(element).render(<BackupsDashboard />)
+  createRoot(element).render(<BackupsDashboard />);
 }

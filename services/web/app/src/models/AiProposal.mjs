@@ -1,6 +1,6 @@
 import mongoose from "../infrastructure/Mongoose.mjs";
 
-const { Schema } = mongoose
+const { Schema } = mongoose;
 
 // A file modification proposed by the AI agent. The agent NEVER writes
 // directly: proposals carry the previous content (snapshot/undo) and are
@@ -24,8 +24,8 @@ const AiProposalSchema = new Schema(
     resolvedAt: { type: Date, default: null },
   },
   { collection: "aiProposals", timestamps: true },
-)
+);
 
-AiProposalSchema.index({ projectId: 1, status: 1, createdAt: -1 })
+AiProposalSchema.index({ projectId: 1, status: 1, createdAt: -1 });
 
-export const AiProposal = mongoose.model('AiProposal', AiProposalSchema)
+export const AiProposal = mongoose.model("AiProposal", AiProposalSchema);

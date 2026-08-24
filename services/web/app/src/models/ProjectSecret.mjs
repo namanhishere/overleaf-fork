@@ -1,6 +1,6 @@
 import mongoose from "../infrastructure/Mongoose.mjs";
 
-const { Schema } = mongoose
+const { Schema } = mongoose;
 
 // Project-level secret. Values are AES-256-GCM encrypted at rest and are
 // never returned by any API: only names and metadata are readable.
@@ -14,11 +14,11 @@ const ProjectSecretSchema = new Schema(
     createdBy: { type: Schema.Types.ObjectId, default: null },
   },
   { collection: "projectSecrets", timestamps: true },
-)
+);
 
-ProjectSecretSchema.index({ projectId: 1, key: 1 }, { unique: true })
+ProjectSecretSchema.index({ projectId: 1, key: 1 }, { unique: true });
 
 export const ProjectSecret = mongoose.model(
-  'ProjectSecret',
-  ProjectSecretSchema
-)
+  "ProjectSecret",
+  ProjectSecretSchema,
+);

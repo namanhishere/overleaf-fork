@@ -7,12 +7,30 @@ import EditorController from "../Editor/EditorController.mjs";
 // binary files, distinguished from LaTeX/markdown source documents.
 const CATEGORIES = {
   data: [".csv", ".tsv", ".json", ".xlsx", ".parquet", ".h5", ".hdf5", ".dat"],
-  figure: [".png", ".jpg", ".jpeg", ".svg", ".gif", ".pdf", ".eps", ".tif", ".tiff"],
+  figure: [
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".svg",
+    ".gif",
+    ".pdf",
+    ".eps",
+    ".tif",
+    ".tiff",
+  ],
   code: [".py", ".r", ".m", ".js", ".ipynb", ".sh", ".do"],
   doc: [".tex", ".md", ".txt", ".bib"],
 };
 
-const SOURCE_EXTENSIONS = new Set([".tex", ".md", ".txt", ".bib", ".sty", ".cls", ".latexmkrc"]);
+const SOURCE_EXTENSIONS = new Set([
+  ".tex",
+  ".md",
+  ".txt",
+  ".bib",
+  ".sty",
+  ".cls",
+  ".latexmkrc",
+]);
 
 export function categorize(name) {
   const ext = path.extname(name).toLowerCase();
@@ -58,8 +76,12 @@ async function listArtifacts(projectId) {
   const all = [];
   for (const root of project.rootFolder || []) walkFolder(root, "", all);
   const artifacts = all
-    .filter(f => f.type === "file" && !SOURCE_EXTENSIONS.has(path.extname(f.path).toLowerCase()))
-    .map(f => ({ ...f, category: categorize(f.path) }));
+    .filter(
+      (f) =>
+        f.type === "file" &&
+        !SOURCE_EXTENSIONS.has(path.extname(f.path).toLowerCase()),
+    )
+    .map((f) => ({ ...f, category: categorize(f.path) }));
   const byCategory = {};
   for (const a of artifacts) {
     byCategory[a.category] ??= [];
@@ -78,7 +100,7 @@ async function ensureArtifactsFolder(projectId, userId) {
   });
   if (project == null) throw new OError("project not found", { projectId });
   const root = project.rootFolder[0];
-  const existing = (root.folders || []).find(f => f.name === "artifacts");
+  const existing = (root.folders || []).find((f) => f.name === "artifacts");
   if (existing) return String(existing._id);
   const folder = await EditorController.promises.addFolder(
     projectId,

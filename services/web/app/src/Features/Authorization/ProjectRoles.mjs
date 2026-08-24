@@ -1,4 +1,4 @@
-import PrivilegeLevels from './PrivilegeLevels.mjs'
+import PrivilegeLevels from "./PrivilegeLevels.mjs";
 
 /**
  * Canonical project role names for APIs and UI, mapped onto the legacy
@@ -15,11 +15,11 @@ const ROLE_TO_PRIVILEGE_LEVEL = {
   editor: PrivilegeLevels.READ_AND_WRITE,
   commenter: PrivilegeLevels.REVIEW,
   viewer: PrivilegeLevels.READ_ONLY,
-}
+};
 
 const PRIVILEGE_LEVEL_TO_ROLE = Object.fromEntries(
-  Object.entries(ROLE_TO_PRIVILEGE_LEVEL).map(([role, level]) => [level, role])
-)
+  Object.entries(ROLE_TO_PRIVILEGE_LEVEL).map(([role, level]) => [level, role]),
+);
 
 /**
  * Normalize user-supplied input to a privilege level string. Accepts both
@@ -27,13 +27,13 @@ const PRIVILEGE_LEVEL_TO_ROLE = Object.fromEntries(
  * ('readAndWrite'). Returns null when unrecognized.
  */
 function toPrivilegeLevel(input) {
-  if (typeof input !== 'string') return null
-  if (PRIVILEGE_LEVEL_TO_ROLE[input] != null) return input
-  return ROLE_TO_PRIVILEGE_LEVEL[input] ?? null
+  if (typeof input !== "string") return null;
+  if (PRIVILEGE_LEVEL_TO_ROLE[input] != null) return input;
+  return ROLE_TO_PRIVILEGE_LEVEL[input] ?? null;
 }
 
 function roleForPrivilegeLevel(level) {
-  return PRIVILEGE_LEVEL_TO_ROLE[level] ?? null
+  return PRIVILEGE_LEVEL_TO_ROLE[level] ?? null;
 }
 
 export default {
@@ -41,4 +41,4 @@ export default {
   PRIVILEGE_LEVEL_TO_ROLE,
   toPrivilegeLevel,
   roleForPrivilegeLevel,
-}
+};

@@ -17,7 +17,13 @@ const MAX_CONTEXT_FILES = 60;
 async function getSettings() {
   let doc = await AiSettings.findOne({ key: "global" }).lean().exec();
   if (doc == null) {
-    doc = { enabled: false, baseUrl: null, apiKey: null, model: null, maxIterations: 3 };
+    doc = {
+      enabled: false,
+      baseUrl: null,
+      apiKey: null,
+      model: null,
+      maxIterations: 3,
+    };
   }
   return { ...doc, apiKey: doc.apiKey || null };
 }
@@ -107,7 +113,7 @@ async function getProjectContext(projectId) {
     }
     contextFiles.push({ path: f.path, content });
   }
-  return { files: files.map(f => f.path), contextFiles };
+  return { files: files.map((f) => f.path), contextFiles };
 }
 
 // ---- proposals ----
@@ -201,11 +207,7 @@ async function listProposals(projectId, { includeResolved = false } = {}) {
   const query = includeResolved
     ? { projectId }
     : { projectId, status: "pending" };
-  return AiProposal.find(query)
-    .sort({ createdAt: -1 })
-    .limit(50)
-    .lean()
-    .exec();
+  return AiProposal.find(query).sort({ createdAt: -1 }).limit(50).lean().exec();
 }
 
 // ---- agent loop (OpenAI-compatible chat completions with tools) ----
@@ -298,7 +300,7 @@ async function runAgent(projectId, userId, task) {
     "You can read files, propose file changes (the human approves them), compile, and read compile logs.",
     "Never invent citations. Keep LaTeX valid. Be concise.",
     "Project content:",
-    ...context.contextFiles.map(f => `--- ${f.path} ---\n${f.content}`),
+    ...context.contextFiles.map((f) => `--- ${f.path} ---\n${f.content}`),
   ].join("\n");
 
   const messages = [
@@ -346,11 +348,12 @@ async function runAgent(projectId, userId, task) {
             }
             case "compile_project": {
               const limits = { timeout: 60 };
-              const result2 = await CompileManager.promises.compile(
-                projectId,
-                userId,
-                { timeout: limits.timeout },
-              ).catch(err => ({ status: "error", error: String(err.message) }));
+              const result2 = await CompileManager.promises
+                .compile(projectId, userId, { timeout: limits.timeout })
+                .catch((err) => ({
+                  status: "error",
+                  error: String(err.message),
+                }));
               latestCompile.status = result2.status;
               result = { status: result2.status };
               break;
@@ -394,7 +397,7 @@ async function runAgent(projectId, userId, task) {
 
   return {
     transcript,
-    proposals: proposals.map(p => ({
+    proposals: proposals.map((p) => ({
       _id: String(p._id),
       path: p.path,
       status: p.status,
@@ -413,7 +416,9 @@ async function generateInitDoc(projectId, userId) {
     "",
     "## Files",
     "",
-    ...files.map(f => `- ${f.path}${f.type === "file" ? " (binary file)" : ""}`),
+    ...files.map(
+      (f) => `- ${f.path}${f.type === "file" ? " (binary file)" : ""}`,
+    ),
     "",
     "## Conventions",
     "",
@@ -460,7 +465,9 @@ async function summarizeComments(projectId) {
     return { summary: "No review comments in this project.", unresolved: 0 };
   }
   const listing = status.threads
-    .map(t => `- [${t.resolved ? "resolved" : "unresolved"}] ${t.firstMessage}`)
+    .map(
+      (t) => `- [${t.resolved ? "resolved" : "unresolved"}] ${t.firstMessage}`,
+    )
     .join("\n");
   const raw = await fetchString(`${settings.baseUrl}/chat/completions`, {
     method: "POST",

@@ -1,6 +1,6 @@
 import mongoose from "../infrastructure/Mongoose.mjs";
 
-const { Schema } = mongoose
+const { Schema } = mongoose;
 
 // Immutable, traceable release of a project: pins a source snapshot
 // (history version), a compiled PDF (CLSI buildId) and the compiler
@@ -23,10 +23,10 @@ const ProjectReleaseSchema = new Schema(
     createdBy: { type: Schema.Types.ObjectId, default: null },
   },
   { collection: "projectReleases", timestamps: true },
-)
-ProjectReleaseSchema.index({ projectId: 1, createdAt: -1 })
+);
+ProjectReleaseSchema.index({ projectId: 1, createdAt: -1 });
 
 export const ProjectRelease = mongoose.model(
-  'ProjectRelease',
-  ProjectReleaseSchema
-)
+  "ProjectRelease",
+  ProjectReleaseSchema,
+);

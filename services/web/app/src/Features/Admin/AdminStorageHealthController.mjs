@@ -13,21 +13,31 @@ const HEALTH_TIMEOUT_MS = 3000;
 async function mongoHealth() {
   try {
     const status = await replicaSetStatus();
-    const members = (status.members || []).map(m => ({
+    const members = (status.members || []).map((m) => ({
       name: m.name,
       state: m.stateStr,
-      healthy: m.health === 1 && (m.stateStr === "PRIMARY" || m.stateStr === "SECONDARY"),
+      healthy:
+        m.health === 1 &&
+        (m.stateStr === "PRIMARY" || m.stateStr === "SECONDARY"),
     }));
     return {
       replicaSet: true,
       setName: status.set || null,
-      healthy: members.some(m => m.state === "PRIMARY"),
+      healthy: members.some((m) => m.state === "PRIMARY"),
       members,
     };
   } catch (err) {
     const msg = String(err?.message || err);
-    if (msg.includes("not running with --replSet") || msg.includes("no replset")) {
-      return { replicaSet: false, healthy: true, members: [], standalone: true };
+    if (
+      msg.includes("not running with --replSet") ||
+      msg.includes("no replset")
+    ) {
+      return {
+        replicaSet: false,
+        healthy: true,
+        members: [],
+        standalone: true,
+      };
     }
     return { replicaSet: null, healthy: false, error: msg.slice(0, 200) };
   }
