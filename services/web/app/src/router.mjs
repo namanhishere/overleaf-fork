@@ -37,6 +37,7 @@ import AdminBackupController from "./Features/Admin/AdminBackupController.mjs";
 import MarkdownController from "./Features/Markdown/MarkdownController.mjs";
 import AiAgentController from "./Features/AiAgent/AiAgentController.mjs";
 import SecretsController from "./Features/Secrets/SecretsController.mjs";
+import ArtifactsController from "./Features/Artifacts/ArtifactsController.mjs";
 import SsoController from "./Features/Authentication/SsoController.mjs";
 import HealthCheckController from "./Features/HealthCheck/HealthCheckController.mjs";
 import ProjectDownloadsController from "./Features/Downloads/ProjectDownloadsController.mjs";
@@ -1258,6 +1259,23 @@ async function initialize(webRouter, privateApiRouter, publicApiRouter) {
     "/project/:Project_id/api/secrets/:key",
     AuthorizationMiddleware.ensureUserCanWriteProjectContent,
     SecretsController.deleteSecret,
+  );
+  webRouter.get(
+    "/project/:Project_id/artifacts",
+    AuthorizationMiddleware.ensureUserCanReadProject,
+    (req, res) =>
+      res.render("project/artifacts", { projectId: req.params.Project_id }),
+  );
+  webRouter.get(
+    "/project/:Project_id/api/artifacts",
+    AuthorizationMiddleware.ensureUserCanReadProject,
+    ArtifactsController.listArtifacts,
+  );
+  webRouter.post(
+    "/project/:Project_id/api/artifacts/upload",
+    AuthenticationController.requireLogin(),
+    AuthorizationMiddleware.ensureUserCanWriteProjectContent,
+    ArtifactsController.upload,
   );
   webRouter.get(
     "/admin/ai",
