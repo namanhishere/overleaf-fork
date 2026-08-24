@@ -8,4 +8,4 @@ docker-compose.override.yml
 
 node_modules/
 .yarn/
-PLANS.md
+PLANS.mdservices/clsi/reports/
