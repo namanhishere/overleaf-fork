@@ -174,6 +174,32 @@ class ProcessSampler {
   }
 }
 
+// Total size in bytes of a directory tree, capped to avoid walking
+// pathological trees (PLANS 3 "Disk usage" telemetry).
+function directorySize(dir, depth = 0) {
+  let total = 0;
+  if (depth > 6) return total;
+  let entries;
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return total;
+  }
+  for (const entry of entries) {
+    const full = Path.join(dir, entry.name);
+    try {
+      if (entry.isDirectory()) {
+        total += directorySize(full, depth + 1);
+      } else {
+        total += fs.statSync(full).size;
+      }
+    } catch {
+      // files vanishing mid-walk are fine
+    }
+  }
+  return total;
+}
+
 export default CommandRunner = {
   run(
     projectId,
@@ -298,6 +324,15 @@ export default CommandRunner = {
           peakRssBytes: String(stats.peakRssBytes ?? ""),
           logExcerpt: stdout.slice(-8192),
           updatedAt: String(Date.now()),
+        });
+        // Disk usage (PLANS 3): measured after the compile so outputs are
+        // included; written separately since the walk is asynchronous work.
+        fs.stat(directory, () => {
+          const diskBytes = directorySize(directory);
+          void writeJobHash(jobId, {
+            peakDiskBytes: String(diskBytes),
+            updatedAt: String(Date.now()),
+          });
         });
       }
       const wasKilled = killedPids.delete(proc.pid);

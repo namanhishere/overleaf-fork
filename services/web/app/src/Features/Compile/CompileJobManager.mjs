@@ -70,6 +70,7 @@ async function readWorkerTelemetry(jobId) {
       "runtimeMs",
       "peakCpuPercent",
       "peakRssBytes",
+      "peakDiskBytes",
       "pid",
       "exitCode",
     ]) {
@@ -276,6 +277,8 @@ const CompileJobManager = {
     if (merged.peakCpuPercent != null)
       update.peakCpuPercent = merged.peakCpuPercent;
     if (merged.peakRssBytes != null) update.peakRssBytes = merged.peakRssBytes;
+    if (merged.peakDiskBytes != null)
+      update.peakDiskBytes = merged.peakDiskBytes;
     if (merged.logExcerpt != null)
       update.logExcerpt = String(merged.logExcerpt).slice(-8192);
     if (merged.workerId != null) update.workerId = merged.workerId;

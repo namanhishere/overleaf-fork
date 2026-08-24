@@ -20,6 +20,7 @@ export const CompileJobSchema = new Schema(
     runtimeMs: { type: Number },
     peakCpuPercent: { type: Number },
     peakRssBytes: { type: Number },
+    peakDiskBytes: { type: Number },
     attempts: { type: Number, default: 1 },
     imageName: { type: String },
     compiler: { type: String },

@@ -15,6 +15,7 @@ type CompileJob = {
   runtimeMs?: number;
   peakCpuPercent?: number;
   peakRssBytes?: number;
+  peakDiskBytes?: number;
   imageName?: string;
   compiler?: string;
   error?: string;
@@ -110,6 +111,7 @@ function JobsDashboard() {
             <th>Runtime</th>
             <th>CPU</th>
             <th>RAM</th>
+            <th>Disk</th>
             <th>Actions</th>
           </tr>
         </thead>
@@ -130,6 +132,7 @@ function JobsDashboard() {
                 {job.peakCpuPercent != null ? `${job.peakCpuPercent}%` : "—"}
               </td>
               <td>{formatBytes(job.peakRssBytes)}</td>
+              <td>{formatBytes(job.peakDiskBytes)}</td>
               <td>
                 {job.status === "queued" || job.status === "running" ? (
                   <button
