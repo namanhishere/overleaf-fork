@@ -53,6 +53,24 @@ describe("SsoManager", function () {
       },
     };
     ctx.fetchString = sinon.stub();
+    // Chainable fake ldap client: bind/search programmable per test.
+    ctx.ldapClient = {
+      bind: sinon.stub().callsFake((dn, pw, cb) => cb()),
+      search: sinon.stub().callsFake((base, opts, cb) => {
+        const res = {
+          on: (ev, fn) => {
+            if (ev === "searchEntry" && ctx.ldapEntries) {
+              ctx.ldapEntries.forEach(fn)
+            }
+            if (ev === "end") fn()
+          },
+        }
+        cb(null, res)
+      }),
+      unbind: sinon.stub().callsFake(cb => cb && cb()),
+    }
+    ctx.ldapjs = { createClient: sinon.stub().returns(ctx.ldapClient) }
+    ctx.ldapEntries = []
 
     vi.doMock("../../../../../app/src/models/SsoProvider.mjs", () => ({
       SsoProvider: ctx.SsoProvider,
@@ -67,6 +85,9 @@ describe("SsoManager", function () {
     }));
     vi.doMock("@overleaf/fetch-utils", () => ({
       fetchString: ctx.fetchString,
+    }));
+    vi.doMock("ldapjs", () => ({
+      default: ctx.ldapjs,
     }));
     vi.doMock("@overleaf/settings", () => ({
       default: { siteUrl: "http://localhost:3000" },
@@ -190,6 +211,91 @@ describe("SsoManager", function () {
       await expect(
         ctx.manager.promises.findOrCreateUser(PROVIDER, { sub: "s4" }),
       ).to.be.rejectedWith(/missing email/);
+    });
+  });
+
+  describe("authenticateLdap", function () {
+    const LDAP_PROVIDER = {
+      slug: "university-ldap",
+      type: "ldap",
+      ldapUrl: "ldap://ldap.university.edu",
+      baseDn: "ou=people,dc=uni,dc=edu",
+      searchFilter: "(mail={{username}})",
+      adminDn: "cn=admin,dc=uni,dc=edu",
+      adminPassword: "admin-pw",
+      autoRegister: true,
+    }
+
+    it("binds as the found user and returns the identity", async function (ctx) {
+      ctx.ldapEntries = [
+        { object: { dn: "uid=alice,ou=people,dc=uni,dc=edu", mail: "alice@uni.edu", cn: "Alice Doe" } },
+      ]
+      const identity = await ctx.manager.promises.authenticateLdap(
+        LDAP_PROVIDER,
+        "alice@uni.edu",
+        "user-pw",
+      );
+      expect(identity.email).to.equal("alice@uni.edu");
+      expect(identity.name).to.equal("Alice Doe");
+      // first bind: admin; second bind: the user DN with the user password
+      expect(ctx.ldapClient.bind.firstCall.args[0]).to.equal(LDAP_PROVIDER.adminDn);
+      expect(ctx.ldapClient.bind.secondCall.args[0]).to.equal("uid=alice,ou=people,dc=uni,dc=edu");
+      expect(ctx.ldapClient.bind.secondCall.args[1]).to.equal("user-pw");
+      // search filter has the escaped username substituted
+      const searchOpts = ctx.ldapClient.search.firstCall.args[1];
+      expect(searchOpts.filter).to.equal("(mail=alice@uni.edu)");
+    });
+
+    it("returns null when the user bind is rejected", async function (ctx) {
+      ctx.ldapEntries = [
+        { object: { dn: "uid=alice,ou=people,dc=uni,dc=edu", mail: "alice@uni.edu" } },
+      ];
+      ctx.ldapClient.bind.callsFake((dn, pw, cb) => {
+        if (dn.startsWith("uid=")) {
+          const e = new Error("Invalid Credentials");
+          e.name = "InvalidCredentialsError";
+          return cb(e);
+        }
+        cb();
+      });
+      const identity = await ctx.manager.promises.authenticateLdap(
+        LDAP_PROVIDER,
+        "alice@uni.edu",
+        "wrong",
+      );
+      expect(identity).to.be.null;
+    });
+
+    it("returns null when no entry matches", async function (ctx) {
+      ctx.ldapEntries = [];
+      const identity = await ctx.manager.promises.authenticateLdap(
+        LDAP_PROVIDER,
+        "nobody@uni.edu",
+        "pw",
+      );
+      expect(identity).to.be.null;
+    });
+
+    it("escapes LDAP special characters in the username", async function (ctx) {
+      ctx.ldapEntries = [];
+      await ctx.manager.promises.authenticateLdap(
+        LDAP_PROVIDER,
+        "a*b(x)",
+        "pw",
+      );
+      const searchOpts = ctx.ldapClient.search.firstCall.args[1];
+      expect(searchOpts.filter).to.not.contain("a*b");
+      expect(searchOpts.filter).to.contain("2a");
+    });
+
+    it("rejects non-ldap providers", async function (ctx) {
+      await expect(
+        ctx.manager.promises.authenticateLdap(
+          { slug: "x", type: "oidc" },
+          "a@b.c",
+          "pw",
+        ),
+      ).to.be.rejectedWith(/not an LDAP provider/);
     });
   });
 

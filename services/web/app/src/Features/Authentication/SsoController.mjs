@@ -11,6 +11,98 @@ function _userId(req) {
   return SessionManager.getLoggedInUserId(req.session);
 }
 
+// POST /login middleware: when the submitted credentials match an
+// enabled LDAP provider, complete the login here and skip the local
+// password check. Otherwise fall through to local authentication.
+async function tryLdapLogin(req, res, next) {
+  const email = String(req.body?.email || "").trim();
+  const password = String(req.body?.password || "");
+  if (!email || !password) return next();
+
+  let providers = [];
+  try {
+    providers = (await SsoManager.promises.listProviders({ enabledOnly: true }))
+      .filter(p => p.type === "ldap");
+  } catch {
+    return next();
+  }
+  if (providers.length === 0) return next();
+
+  for (const provider of providers) {
+    let identity = null;
+    try {
+      identity = await SsoManager.promises.authenticateLdap(
+        provider,
+        email,
+        password,
+      );
+    } catch (err) {
+      logger.warn(
+        { err, slug: provider.slug },
+        "ldap login: directory error",
+      );
+      continue;
+    }
+    if (identity == null) continue;
+
+    try {
+      const user = await SsoManager.promises.findOrCreateUser(provider, {
+        sub: identity.email,
+        email: identity.email,
+        name: identity.name,
+      });
+      const userId = String(user._id);
+
+      await UserUpdater.promises.updateUser(userId, {
+        $set: { lastLoggedIn: new Date() },
+        $inc: { loginCount: 1 },
+      });
+      await UserAuditLogHandler.promises.addEntry(
+        userId,
+        "login",
+        userId,
+        req.ip,
+        { method: `LDAP login (${provider.slug})` },
+      );
+
+      await new Promise((resolve, reject) =>
+        req.session.regenerate(err => (err ? reject(err) : resolve())),
+      );
+      req.session.passport = {
+        user: {
+          _id: user._id,
+          first_name: user.first_name,
+          last_name: user.last_name,
+          email: user.email,
+          session_created: new Date().toISOString(),
+          ip_address: req.ip,
+          analyticsId: user.analyticsId || String(user._id),
+          ...(user.isAdmin ? { isAdmin: true } : {}),
+        },
+      };
+      req.session.analyticsId = user.analyticsId || String(user._id);
+      await new Promise((resolve, reject) =>
+        req.session.save(err => (err ? reject(err) : resolve())),
+      );
+
+      await AuditLogManager.promises.recordAudit({
+        actorId: userId,
+        action: "login",
+        targetType: "user",
+        targetId: userId,
+        info: { method: `LDAP login (${provider.slug})` },
+        ipAddress: req.ip,
+      });
+
+      return res.redirect("/project");
+    } catch (err) {
+      logger.warn({ err, slug: provider.slug }, "ldap login: failed");
+      return next();
+    }
+  }
+  return next();
+}
+
 // GET /sso/:slug/start
 async function start(req, res) {
   const provider = await SsoManager.promises.getProvider(req.params.slug, {
@@ -216,6 +308,7 @@ async function deleteProvider(req, res) {
 }
 
 export default {
+  tryLdapLogin,
   start: expressify(start),
   callback: expressify(callback),
   listProviders: expressify(listProviders),

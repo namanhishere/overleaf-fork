@@ -5,20 +5,29 @@ import { getJSON, postJSON } from '@/infrastructure/fetch-json'
 type SsoProvider = {
   slug: string
   name: string
+  type: 'oidc' | 'ldap'
   enabled: boolean
-  issuerUrl: string
-  clientId: string
+  issuerUrl: string | null
+  clientId: string | null
   scopes: string
   autoRegister: boolean
+  ldapUrl: string | null
+  baseDn: string | null
 }
 
 const EMPTY_FORM = {
   slug: '',
   name: '',
+  type: 'oidc',
   issuerUrl: '',
   clientId: '',
   clientSecret: '',
   scopes: 'openid email profile',
+  ldapUrl: '',
+  adminDn: '',
+  adminPassword: '',
+  baseDn: '',
+  searchFilter: '(mail={{username}})',
   autoRegister: true,
   enabled: true,
 }
@@ -67,7 +76,15 @@ function SsoDashboard() {
     setError(null)
     setMessage(null)
     try {
-      await postJSON('/admin/api/sso', { body: form })
+      await postJSON('/admin/api/sso', {
+        body: {
+          ...form,
+          // Only send fields relevant to the selected type.
+          ...(form.type === 'oidc'
+            ? { ldapUrl: undefined, adminDn: undefined, adminPassword: undefined, baseDn: undefined, searchFilter: undefined }
+            : { issuerUrl: undefined, clientId: undefined, clientSecret: undefined, scopes: undefined }),
+        },
+      })
       setForm({ ...EMPTY_FORM })
       setMessage('Provider created.')
       refresh()
@@ -119,6 +136,10 @@ function SsoDashboard() {
 
       <h2>New provider</h2>
       <form onSubmit={createProvider}>
+        <select value={form.type} onChange={e => set('type', e.target.value)}>
+          <option value="oidc">OIDC / OAuth2</option>
+          <option value="ldap">LDAP</option>
+        </select>{' '}
         <input
           type="text"
           value={form.slug}
@@ -133,28 +154,71 @@ function SsoDashboard() {
           required
           onChange={e => set('name', e.target.value)}
         />{' '}
-        <input
-          type="text"
-          value={form.issuerUrl}
-          placeholder="Issuer URL"
-          required
-          size={36}
-          onChange={e => set('issuerUrl', e.target.value)}
-        />{' '}
-        <input
-          type="text"
-          value={form.clientId}
-          placeholder="Client ID"
-          required
-          onChange={e => set('clientId', e.target.value)}
-        />{' '}
-        <input
-          type="password"
-          value={form.clientSecret}
-          placeholder="Client secret"
-          required
-          onChange={e => set('clientSecret', e.target.value)}
-        />{' '}
+        {form.type === 'oidc' ? (
+          <>
+            <input
+              type="text"
+              value={form.issuerUrl}
+              placeholder="Issuer URL"
+              required
+              size={36}
+              onChange={e => set('issuerUrl', e.target.value)}
+            />{' '}
+            <input
+              type="text"
+              value={form.clientId}
+              placeholder="Client ID"
+              required
+              onChange={e => set('clientId', e.target.value)}
+            />{' '}
+            <input
+              type="password"
+              value={form.clientSecret}
+              placeholder="Client secret"
+              required
+              onChange={e => set('clientSecret', e.target.value)}
+            />{' '}
+          </>
+        ) : (
+          <>
+            <input
+              type="text"
+              value={form.ldapUrl}
+              placeholder="LDAP URL (ldap://host:389)"
+              required
+              size={30}
+              onChange={e => set('ldapUrl', e.target.value)}
+            />{' '}
+            <input
+              type="text"
+              value={form.baseDn}
+              placeholder="Search base DN"
+              required
+              size={30}
+              onChange={e => set('baseDn', e.target.value)}
+            />{' '}
+            <input
+              type="text"
+              value={form.adminDn}
+              placeholder="Admin DN (optional)"
+              size={28}
+              onChange={e => set('adminDn', e.target.value)}
+            />{' '}
+            <input
+              type="password"
+              value={form.adminPassword}
+              placeholder="Admin password"
+              onChange={e => set('adminPassword', e.target.value)}
+            />{' '}
+            <input
+              type="text"
+              value={form.searchFilter}
+              placeholder='Filter ({{username}})'
+              size={24}
+              onChange={e => set('searchFilter', e.target.value)}
+            />{' '}
+          </>
+        )}
         <label>
           <input
             type="checkbox"
@@ -181,9 +245,9 @@ function SsoDashboard() {
         <thead>
           <tr>
             <th>Slug</th>
+            <th>Type</th>
             <th>Name</th>
-            <th>Issuer</th>
-            <th>Client ID</th>
+            <th>Issuer / LDAP URL</th>
             <th>Auto-register</th>
             <th>Status</th>
             <th>Actions</th>
@@ -195,9 +259,9 @@ function SsoDashboard() {
               <td>
                 <code>{p.slug}</code>
               </td>
+              <td>{p.type}</td>
               <td>{p.name}</td>
-              <td>{p.issuerUrl}</td>
-              <td>{p.clientId}</td>
+              <td>{p.type === 'ldap' ? p.ldapUrl : p.issuerUrl}</td>
               <td>{p.autoRegister ? 'yes' : 'no'}</td>
               <td>{p.enabled ? 'Enabled' : 'Disabled'}</td>
               <td>

@@ -9,17 +9,28 @@ const SsoProviderSchema = new Schema(
   {
     slug: { type: String, required: true, unique: true },
     name: { type: String, required: true },
+    // 'oidc': redirect-based OpenID Connect; 'ldap': direct bind against
+    // a directory server from the login form.
+    type: { type: String, enum: ["oidc", "ldap"], default: "oidc" },
     enabled: { type: Boolean, default: false },
+    // --- OIDC fields ---
     // OIDC issuer base url; discovery document is read from
     // {issuerUrl}/.well-known/openid-configuration
-    issuerUrl: { type: String, required: true },
-    clientId: { type: String, required: true },
+    issuerUrl: { type: String, default: null },
+    clientId: { type: String, default: null },
     // Stored write-only: never returned by any API response.
-    clientSecret: { type: String, required: true },
+    clientSecret: { type: String, default: null },
     scopes: { type: String, default: "openid email profile" },
-    // Create a local account on first SSO login when no user matches.
-    autoRegister: { type: Boolean, default: true },
-    createdBy: { type: Schema.Types.ObjectId, default: null },
+    // --- LDAP fields ---
+    ldapUrl: { type: String, default: null },
+    // Service bind credentials for the user search (optional when the
+    // directory allows anonymous search).
+    adminDn: { type: String, default: null },
+    adminPassword: { type: String, default: null },
+    baseDn: { type: String, default: null },
+    // {{username}} is replaced with the submitted login email.
+    searchFilter: { type: String, default: "(mail={{username}})" },
+    // --- shared ---
   },
   { collection: "ssoProviders", timestamps: true },
 )

@@ -5,6 +5,7 @@ import { fetchString } from "@overleaf/fetch-utils";
 import { SsoProvider } from "../../models/SsoProvider.mjs";
 import UserGetter from "../User/UserGetter.mjs";
 import UserCreator from "../User/UserCreator.mjs";
+import ldapjs from "ldapjs";
 
 const DISCOVERY_TTL_MS = 60 * 60 * 1000; // 1 hour
 const discoveryCache = new Map(); // slug -> { doc, expiresAt }
@@ -36,20 +37,46 @@ async function createProvider(body, userId = null) {
   if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(slug)) {
     throw new OError("invalid provider slug", { slug });
   }
-  for (const field of ["name", "issuerUrl", "clientId", "clientSecret"]) {
-    if (!body[field] || !String(body[field]).trim()) {
-      throw new OError(`missing provider field: ${field}`, { field });
+  if (!body.name || !String(body.name).trim()) {
+    throw new OError("missing provider field: name", { field: "name" });
+  }
+  const type = body.type === "ldap" ? "ldap" : "oidc";
+  if (type === "oidc") {
+    for (const field of ["issuerUrl", "clientId", "clientSecret"]) {
+      if (!body[field] || !String(body[field]).trim()) {
+        throw new OError(`missing provider field: ${field}`, { field });
+      }
+    }
+  } else {
+    for (const field of ["ldapUrl", "baseDn"]) {
+      if (!body[field] || !String(body[field]).trim()) {
+        throw new OError(`missing provider field: ${field}`, { field });
+      }
     }
   }
   try {
     const provider = await SsoProvider.create({
       slug,
       name: String(body.name).trim().slice(0, 100),
+      type,
       enabled: Boolean(body.enabled),
-      issuerUrl: String(body.issuerUrl).trim().replace(/\/$/, ""),
-      clientId: String(body.clientId).trim(),
-      clientSecret: String(body.clientSecret),
-      scopes: String(body.scopes || "openid email profile"),
+      issuerUrl:
+        type === "oidc" && body.issuerUrl
+          ? String(body.issuerUrl).trim().replace(/\/$/, "")
+          : null,
+      clientId:
+        type === "oidc" && body.clientId
+          ? String(body.clientId).trim()
+          : null,
+      clientSecret:
+        type === "oidc" && body.clientSecret
+          ? String(body.clientSecret)
+          : null,
+      ldapUrl: body.ldapUrl ? String(body.ldapUrl).trim() : null,
+      adminDn: body.adminDn ? String(body.adminDn).trim() : null,
+      adminPassword: body.adminPassword ? String(body.adminPassword) : null,
+      baseDn: body.baseDn ? String(body.baseDn).trim() : null,
+      searchFilter: String(body.searchFilter || "(mail={{username}})"),
       autoRegister: body.autoRegister !== false,
       createdBy: userId,
     });
@@ -76,6 +103,13 @@ async function updateProvider(slug, body, userId = null) {
   // clientSecret is write-only: only update when a non-empty value arrives.
   if (body.clientSecret) patch.clientSecret = String(body.clientSecret);
   if (body.scopes != null) patch.scopes = String(body.scopes);
+  if (body.ldapUrl != null)
+    patch.ldapUrl = String(body.ldapUrl).trim() || null;
+  if (body.adminDn != null) patch.adminDn = String(body.adminDn).trim() || null;
+  if (body.adminPassword) patch.adminPassword = String(body.adminPassword);
+  if (body.baseDn != null) patch.baseDn = String(body.baseDn).trim() || null;
+  if (body.searchFilter != null)
+    patch.searchFilter = String(body.searchFilter);
   if (body.autoRegister !== undefined)
     patch.autoRegister = Boolean(body.autoRegister);
   await SsoProvider.updateOne({ slug }, { $set: patch }).exec();
@@ -196,11 +230,89 @@ async function findOrCreateUser(provider, claims) {
   });
 }
 
+/**
+ * Authenticate a username/password against an LDAP provider: service bind
+ * (when adminDn is configured), user lookup via searchFilter, then a bind
+ * as the found user DN to verify the password. Returns the identity
+ * { email, name } or null when the credentials are rejected.
+ */
+async function authenticateLdap(provider, username, password) {
+  if (provider.type !== "ldap" || !provider.ldapUrl) {
+    throw new OError("not an LDAP provider", { slug: provider.slug });
+  }
+  const escapeLdap = (v) =>
+    String(v).replace(/[\\*()\0]/g, (c) => "\\" + c.charCodeAt(0).toString(16).padStart(2, "0"));
+  const filter = (provider.searchFilter || "(mail={{username}})").replace(
+    "{{username}}",
+    escapeLdap(username),
+  );
+
+  const client = ldapjs.createClient({ url: provider.ldapUrl });
+  const bindAs = (dn, pw) =>
+    new Promise((resolve, reject) =>
+      client.bind(dn, pw, (err) => (err ? reject(err) : resolve())),
+    );
+  const search = (base, opts) =>
+    new Promise((resolve, reject) => {
+      client.search(base, opts, (err, res) => {
+        if (err) return reject(err);
+        const entries = [];
+        res.on("searchEntry", (entry) => entries.push(entry));
+        res.on("error", reject);
+        res.on("end", () => resolve(entries));
+      });
+    });
+
+  try {
+    if (provider.adminDn) {
+      await bindAs(provider.adminDn, provider.adminPassword || "");
+    }
+    const entries = await search(provider.baseDn, {
+      scope: "sub",
+      filter,
+      sizeLimit: 2,
+    });
+    if (entries.length !== 1) {
+      return null; // unknown user or ambiguous match: treat as rejection
+    }
+    const entry = entries[0];
+    const dn = entry.object ? entry.object.dn : entry.dn;
+    await bindAs(dn, password); // rejects when the password is wrong
+    const attrs = entry.object || {};
+    const emailAttr =
+      attrs.mail ||
+      attrs.email ||
+      (Array.isArray(attrs.mail) ? attrs.mail[0] : null);
+    return {
+      email: String(emailAttr || username).toLowerCase(),
+      name: String(attrs.cn || attrs.name || username),
+    };
+  } catch (err) {
+    // Invalid-credentials style errors mean rejection, not failure.
+    const msg = String(err?.message || err);
+    if (
+      err?.name === "InvalidCredentialsError" ||
+      /invalid credentials/i.test(msg) ||
+      /no such object/i.test(msg)
+    ) {
+      return null;
+    }
+    throw new OError("ldap authentication error", { slug: provider.slug }, err);
+  } finally {
+    try {
+      client.unbind(() => {});
+    } catch {
+      // ignore unbind errors
+    }
+  }
+}
+
 function generateState() {
   return crypto.randomBytes(24).toString("hex");
 }
 
 const SsoManager = {
+  authenticateLdap,
   listProviders,
   getProvider,
   createProvider,
@@ -213,6 +325,7 @@ const SsoManager = {
   findOrCreateUser,
   generateState,
   promises: {
+    authenticateLdap,
     listProviders,
     getProvider,
     createProvider,
