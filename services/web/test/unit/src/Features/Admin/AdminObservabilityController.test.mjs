@@ -35,6 +35,14 @@ describe("AdminObservabilityController", function () {
     vi.doMock("../../../../../app/src/models/User.mjs", () => ({
       User: ctx.User,
     }));
+    ctx.AiUsage = {
+      aggregate: sinon.stub().returns({
+        exec: sinon.stub().resolves([]),
+      }),
+    };
+    vi.doMock("../../../../../app/src/models/AiUsage.mjs", () => ({
+      AiUsage: ctx.AiUsage,
+    }));
     vi.doMock("../../../../../app/src/models/AuditEntry.mjs", () => ({
       AuditEntry: ctx.AuditEntry,
     }));
