@@ -17,6 +17,12 @@ type BackupRun = {
   finishedAt: string | null;
   collections: CollectionBackup[];
   error: string | null;
+  offsite?: {
+    pushed: boolean;
+    target?: string;
+    error?: string;
+    reason?: string;
+  };
   restoreTest: {
     at: string;
     targetDb: string;
@@ -153,7 +159,16 @@ function BackupsDashboard() {
                 {!b.onDisk ? " (files missing)" : ""}
               </td>
               <td>{b.label || "—"}</td>
-              <td>{b.status}</td>
+              <td>
+                {b.status}
+                {b.offsite ? (
+                  <div style={{ fontSize: 11 }}>
+                    {b.offsite.pushed
+                      ? `✓ off-site${b.offsite.target ? `: ${b.offsite.target}` : ""}`
+                      : `off-site: ${b.offsite.error || b.offsite.reason || "not pushed"}`}
+                  </div>
+                ) : null}
+              </td>
               <td>{new Date(b.startedAt).toLocaleString()}</td>
               <td>{b.collections.length}</td>
               <td>

@@ -13,10 +13,23 @@ describe("BackupService", function () {
   beforeEach(async function (ctx) {
     ctx.tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "backup-test-"));
     process.env.OVERLEAF_BACKUP_DIR = ctx.tmpDir;
+    delete process.env.OFFSITE_BACKUP_TARGET;
+    ctx.spawnedArgs = [];
+    vi.doMock("node:child_process", () => ({
+      spawn: (cmd, args) => {
+        ctx.spawnedArgs.push([cmd, ...args]);
+        return {
+          stderr: null,
+          on: (ev, cb) => {
+            if (ev === "close") setTimeout(() => cb(0), 0);
+          },
+        };
+      },
+    }));
 
     const collections = {};
     ctx.collections = collections;
-    const makeColl = name => ({
+    const makeColl = (name) => ({
       find: sinon.stub().returns({
         batchSize: () => ({
           hasNext: sinon.stub().resolves(false),
@@ -39,7 +52,9 @@ describe("BackupService", function () {
               updateOne: sinon.stub().resolves({}),
               find: sinon
                 .stub()
-                .returns({ sort: () => ({ limit: () => ({ toArray: async () => [] }) }) }),
+                .returns({
+                  sort: () => ({ limit: () => ({ toArray: async () => [] }) }),
+                }),
             };
           }
           collections[prop] ??= makeColl(prop);
@@ -47,9 +62,11 @@ describe("BackupService", function () {
         },
       },
     );
-    ctx.getCollectionNames = sinon.stub().resolves(["users", "projects", "system.foo"]);
+    ctx.getCollectionNames = sinon
+      .stub()
+      .resolves(["users", "projects", "system.foo"]);
     ctx.getDb = sinon.stub().returns({
-      collection: name => {
+      collection: (name) => {
         collections[`restore:${name}`] ??= {
           deleteMany: sinon.stub().resolves({}),
           insertMany: sinon.stub().resolves({}),
@@ -59,7 +76,7 @@ describe("BackupService", function () {
       },
     });
 
-    ctx.getCollectionInternal = sinon.stub().callsFake(async name => {
+    ctx.getCollectionInternal = sinon.stub().callsFake(async (name) => {
       collections[name] ??= {
         find: sinon.stub().returns({
           batchSize: () => ({
@@ -93,7 +110,7 @@ describe("BackupService", function () {
   it("dumps every non-system collection into gzip files with a manifest", async function (ctx) {
     const run = await ctx.service.promises.runBackup({ label: "test" });
     expect(run.status).to.equal("complete");
-    expect(run.collections.map(c => c.name).sort()).to.deep.equal([
+    expect(run.collections.map((c) => c.name).sort()).to.deep.equal([
       "projects",
       "users",
     ]);
@@ -103,7 +120,10 @@ describe("BackupService", function () {
       expect(c.sizeBytes).to.be.greaterThan(0);
     }
     const manifest = JSON.parse(
-      fs.readFileSync(path.join(ctx.tmpDir, run.runId, "manifest.json"), "utf8"),
+      fs.readFileSync(
+        path.join(ctx.tmpDir, run.runId, "manifest.json"),
+        "utf8",
+      ),
     );
     expect(manifest.status).to.equal("complete");
     expect(manifest.label).to.equal("test");
@@ -111,7 +131,9 @@ describe("BackupService", function () {
 
   it("refuses to run two backups concurrently", async function (ctx) {
     // a slow collection find keeps the first backup running
-    ctx.getCollectionNames.returns(new Promise(resolve => setTimeout(() => resolve(["users"]), 200)));
+    ctx.getCollectionNames.returns(
+      new Promise((resolve) => setTimeout(() => resolve(["users"]), 200)),
+    );
     const first = ctx.service.promises.runBackup({});
     await expect(ctx.service.promises.runBackup({})).to.be.rejectedWith(
       /already running/,
@@ -131,5 +153,44 @@ describe("BackupService", function () {
     expect(() =>
       ctx.service.readCollectionFile("run-1", "../etc/passwd"),
     ).to.throw(/invalid collection name/);
+  });
+
+  describe("off-site backup push (PLANS 6)", function () {
+    function mockSpawn(ctx) {
+      vi.doMock("node:child_process", () => ({
+        spawn: (cmd, args) => {
+          ctx.spawnedArgs.push([cmd, ...args]);
+          return {
+            stderr: null,
+            on: (ev, cb) => {
+              if (ev === "close") setTimeout(() => cb(0), 0);
+            },
+          };
+        },
+      }));
+    }
+
+    it("pushes the run directory when OFFSITE_BACKUP_TARGET is set", async function (ctx) {
+      process.env.OFFSITE_BACKUP_TARGET = "user@backuphost:/backups";
+      vi.resetModules();
+      mockSpawn(ctx);
+      const mod = (await import(modulePath)).default;
+      const record = await mod.promises.runBackup({ label: "offsite" });
+      expect(record.offsite.pushed).to.be.true;
+      expect(record.offsite.target).to.contain("user@backuphost:/backups");
+      const rsync = ctx.spawnedArgs.find((a) => a[0] === "rsync");
+      expect(rsync).to.exist;
+      expect(rsync).to.include("-a");
+      expect(rsync[rsync.length - 1]).to.match(/backup-/);
+    });
+
+    it("skips the push when no target is configured", async function (ctx) {
+      mockSpawn(ctx);
+      const mod = (await import(modulePath)).default;
+      const before = ctx.spawnedArgs.length;
+      const record = await mod.promises.runBackup({ label: "local" });
+      expect(record.offsite.pushed).to.be.false;
+      expect(ctx.spawnedArgs.length).to.equal(before);
+    });
   });
 });

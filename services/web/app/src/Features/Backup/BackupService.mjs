@@ -9,6 +9,7 @@ import mongodb, {
 } from "../../infrastructure/mongodb.mjs";
 import logger from "@overleaf/logger";
 import OError from "@overleaf/o-error";
+import { spawn } from "node:child_process";
 
 const BACKUP_DIR = process.env.OVERLEAF_BACKUP_DIR || "/tmp/overleaf-backups";
 // System collections that must never be dumped or restored.
@@ -16,6 +17,51 @@ const SKIP_COLLECTIONS = new Set(["migrations"]);
 const RESTORE_TEST_DB = "sharelatex_restore_test";
 
 let running = false;
+
+// Off-site backup (PLANS 6): when OFFSITE_BACKUP_TARGET is configured
+// (an rsync-style remote such as "user@backuphost:/backups" or a second
+// local path), the completed run directory is pushed with rsync -a.
+// Spawn with an args array - the target never passes through a shell.
+const OFFSITE_TARGET = process.env.OFFSITE_BACKUP_TARGET || "";
+const OFFSITE_USE_RSYNC = process.env.OFFSITE_USE_RSYNC === "true";
+
+function pushOffsite(runId) {
+  return new Promise((resolve) => {
+    if (!OFFSITE_TARGET)
+      return resolve({ pushed: false, reason: "not configured" });
+    const target = OFFSITE_TARGET.replace(/\/+$/, "") + "/" + runId;
+    // rsync handles remote targets; local targets fall back to cp -a
+    // when rsync is unavailable in the container.
+    const isRemote = target.includes(":") && !/^[a-zA-Z]:/.test(target);
+    const useRsync = isRemote || OFFSITE_USE_RSYNC;
+    const cmd = useRsync ? "rsync" : "cp";
+    if (!useRsync) {
+      // cp -a creates the destination leaf but not its parent
+      try {
+        fs.mkdirSync(path.dirname(target), { recursive: true });
+      } catch {
+        // surfaced by cp if it matters
+      }
+    }
+    const args = useRsync
+      ? ["-a", runDir(runId), target]
+      : ["-a", runDir(runId), target + "/"];
+    const child = spawn(cmd, args, { timeout: 10 * 60 * 1000 });
+    let stderr = "";
+    child.stderr?.on("data", (d) => (stderr += d));
+    child.on("error", (err) =>
+      resolve({ pushed: false, error: String(err.message).slice(0, 300) }),
+    );
+    child.on("close", (code) =>
+      code === 0
+        ? resolve({ pushed: true, target })
+        : resolve({
+            pushed: false,
+            error: `${cmd} exited ${code}: ${stderr.slice(0, 300)}`,
+          }),
+    );
+  });
+}
 
 function runDir(runId) {
   return path.join(BACKUP_DIR, runId);
@@ -69,12 +115,13 @@ async function runBackup({ label = "" } = {}) {
     }
     record.status = "complete";
     record.finishedAt = new Date();
+    record.offsite = await pushOffsite(runId);
     fs.writeFileSync(
       path.join(runDir(runId), "manifest.json"),
       JSON.stringify(record, null, 2),
     );
     await coll.insertOne({ ...record });
-    logger.info({ runId }, "backup completed");
+    logger.info({ runId, offsite: record.offsite }, "backup completed");
     return { ...record };
   } catch (err) {
     record.status = "failed";
