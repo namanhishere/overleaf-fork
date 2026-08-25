@@ -43,17 +43,30 @@ function JobsDashboard() {
   }
 
   useEffect(() => {
-    let timer: ReturnType<typeof setInterval>;
+    let timer: NodeJS.Timeout | undefined;
+    let stopped = false;
     async function tick() {
-      const current = await refresh();
-      // Poll faster while anything is running.
-      timer = setInterval(
-        tick,
-        current.some((j) => j.status === "running") ? 5000 : 15000,
-      );
+      try {
+        const current = await refresh();
+        // Poll faster while anything is running.
+        if (!stopped) {
+          timer = setTimeout(
+            tick,
+            current.some((j) => j.status === "running") ? 5000 : 15000,
+          );
+        }
+      } catch {
+        // Back off on errors (e.g. rate limits) instead of retrying hot.
+        if (!stopped) {
+          timer = setTimeout(tick, 30000);
+        }
+      }
     }
     tick();
-    return () => clearInterval(timer);
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+    };
   }, []);
 
   async function kill(jobId: string) {
