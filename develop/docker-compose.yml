@@ -143,7 +143,8 @@ services:
       - APP_NAME=Overleaf Community Edition
       # Multi-worker registry (PLANS 5): set CLSI_WORKERS to a JSON array
       # of {id, url} for the compilation workers; see docker-compose.ha.yml.
-      - CLSI_WORKERS=${CLSI_WORKERS:-}
+      - REDIS_SENTINELS=${REDIS_SENTINELS:-[{"host":"redis-sentinel-1","port":26379},{"host":"redis-sentinel-2","port":26380},{"host":"redis-sentinel-3","port":26381}]}
+      - CLSI_WORKERS=${CLSI_WORKERS:-[{"id":"worker-01","url":"http://clsi:3013"},{"id":"worker-02","url":"http://clsi-worker-2:3013"},{"id":"worker-03","url":"http://clsi-worker-3:3013"}]}
       # HA requirement (§D16): a fixed session secret so all web instances
       # validate each other's sessions; without it every restart logs
       # everyone out and multi-instance deployments cannot share sessions.

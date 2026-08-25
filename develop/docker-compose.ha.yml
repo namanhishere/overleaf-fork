@@ -47,3 +47,48 @@ services:
       - ${PWD}/output-worker-3:/overleaf/services/clsi/output
       - ${DOCKER_SOCKET_PATH:-/var/run/docker.sock}:/var/run/docker.sock
       - clsi-cache:/overleaf/services/clsi/cache
+
+  # HA Redis (§D16 risk 3): one master (the base `redis` service) plus two
+  # replicas and a three-node sentinel fleet for automatic failover.
+  # Services connect via REDIS_SENTINELS (ioredis sentinel config) instead
+  # of a fixed host; sentinels promote a replica when the master dies.
+  redis-replica-1:
+    image: redis:7
+    command: redis-server --replicaof redis 6379
+    depends_on:
+      - redis
+
+  redis-replica-2:
+    image: redis:7
+    command: redis-server --replicaof redis 6379
+    depends_on:
+      - redis
+
+  redis-sentinel-1:
+    image: redis:7
+    restart: on-failure
+    entrypoint: ["sh", "-c"]
+    command:
+      - "echo 'sentinel resolve-hostnames yes' > /tmp/s.conf && echo 'sentinel announce-hostnames yes' >> /tmp/s.conf && echo 'sentinel monitor mymaster redis 6379 2' >> /tmp/s.conf && echo 'sentinel down-after-milliseconds mymaster 3000' >> /tmp/s.conf && echo 'sentinel failover-timeout mymaster 10000' >> /tmp/s.conf && redis-server /tmp/s.conf --sentinel"
+    depends_on:
+      - redis
+      - redis-replica-1
+      - redis-replica-2
+
+  redis-sentinel-2:
+    image: redis:7
+    restart: on-failure
+    entrypoint: ["sh", "-c"]
+    command:
+      - "sleep 2 && echo 'sentinel resolve-hostnames yes' > /tmp/s.conf && echo 'sentinel monitor mymaster redis 6379 2' >> /tmp/s.conf && echo 'sentinel down-after-milliseconds mymaster 3000' >> /tmp/s.conf && echo 'sentinel failover-timeout mymaster 10000' >> /tmp/s.conf && redis-server /tmp/s.conf --port 26380 --sentinel"
+    depends_on:
+      - redis
+
+  redis-sentinel-3:
+    image: redis:7
+    restart: on-failure
+    entrypoint: ["sh", "-c"]
+    command:
+      - "sleep 4 && echo 'sentinel resolve-hostnames yes' > /tmp/s.conf && echo 'sentinel monitor mymaster redis 6379 2' >> /tmp/s.conf && echo 'sentinel down-after-milliseconds mymaster 3000' >> /tmp/s.conf && echo 'sentinel failover-timeout mymaster 10000' >> /tmp/s.conf && redis-server /tmp/s.conf --port 26381 --sentinel"
+    depends_on:
+      - redis
