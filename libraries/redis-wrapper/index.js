@@ -38,6 +38,23 @@ function createClient(opts) {
     )
   }
 
+  // HA Redis: when REDIS_SENTINELS is set, replace host/port with
+  // ioredis sentinel configuration so every service automatically
+  // connects through the sentinel fleet for master failover (§D16).
+  if (process.env.REDIS_SENTINELS && standardOpts.host) {
+    try {
+      const sentinels = JSON.parse(process.env.REDIS_SENTINELS)
+      if (Array.isArray(sentinels) && sentinels.length > 0) {
+        standardOpts.sentinels = sentinels
+        standardOpts.name = process.env.REDIS_SENTINEL_NAME || 'mymaster'
+        delete standardOpts.host
+        delete standardOpts.port
+      }
+    } catch (e) {
+      // invalid JSON: fall through to fixed host
+    }
+  }
+
   let client
   if (standardOpts.cluster) {
     delete standardOpts.cluster
