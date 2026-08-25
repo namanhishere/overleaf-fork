@@ -1,0 +1,49 @@
+# Multi-worker HA overlay (PLANS 5/6): demonstrates the control-plane /
+# worker split with multiple compilation workers sharing the same Redis
+# and Mongo. Usage:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.ha.yml \
+#     up -d clsi clsi-worker-2 clsi-worker-3
+#
+# Each worker gets a distinct CLSI_SERVER_ID so the worker registry and
+# the admin Workers page show them separately; the Redis stream
+# distributes compiles across them, and per-project pinning
+# (project.compileWorkerId) still routes explicitly-pinned projects.
+#
+# NOTE: the clsi service mounts host ./compiles and ./output paths, so
+# additional workers must use distinct host directories to avoid
+# trampling each other's compile/output trees.
+services:
+  clsi-worker-2:
+    build:
+      context: ..
+      dockerfile: services/clsi/Dockerfile
+      target: with-texlive
+    env_file:
+      - dev.env
+    environment:
+      - SANDBOXED_COMPILES=false
+      - CLSI_SERVER_ID=worker-02
+    user: root
+    volumes:
+      - ${PWD}/compiles-worker-2:/overleaf/services/clsi/compiles
+      - ${PWD}/output-worker-2:/overleaf/services/clsi/output
+      - ${DOCKER_SOCKET_PATH:-/var/run/docker.sock}:/var/run/docker.sock
+      - clsi-cache:/overleaf/services/clsi/cache
+
+  clsi-worker-3:
+    build:
+      context: ..
+      dockerfile: services/clsi/Dockerfile
+      target: with-texlive
+    env_file:
+      - dev.env
+    environment:
+      - SANDBOXED_COMPILES=false
+      - CLSI_SERVER_ID=worker-03
+    user: root
+    volumes:
+      - ${PWD}/compiles-worker-3:/overleaf/services/clsi/compiles
+      - ${PWD}/output-worker-3:/overleaf/services/clsi/output
+      - ${DOCKER_SOCKET_PATH:-/var/run/docker.sock}:/var/run/docker.sock
+      - clsi-cache:/overleaf/services/clsi/cache

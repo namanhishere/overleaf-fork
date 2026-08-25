@@ -247,6 +247,13 @@ module.exports = {
     },
     clsi: {
       url: `http://${process.env.CLSI_HOST || '127.0.0.1'}:3013`,
+      // Multi-worker registry (PLANS 5): JSON array of {id, url} when
+      // multiple compilation workers are deployed, e.g.
+      // CLSI_WORKERS='[{"id":"worker-02","url":"http://clsi-worker-2:3013"}]'
+      // When unset, the single default CLSI above is used.
+      workers: process.env.CLSI_WORKERS
+        ? JSON.parse(process.env.CLSI_WORKERS)
+        : undefined,
       downloadHost:
         process.env.CLSI_LB_IP || process.env.CLSI_LB_HOST
           ? `http://${process.env.CLSI_LB_IP || process.env.CLSI_LB_HOST}:80`
