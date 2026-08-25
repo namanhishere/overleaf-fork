@@ -11,3 +11,7 @@ node_modules/
 PLANS.md
 services/clsi/reports/
 develop/output/
+compiles-worker-2/
+output-worker-2/
+compiles-worker-3/
+output-worker-3/
