@@ -43,6 +43,18 @@ describe('UserAuditLogHandler', function () {
       UserAuditLogEntry,
     }))
 
+    ctx.recordAudit = sinon.stub().resolves()
+    vi.doMock(
+      '../../../../app/src/Features/Audit/AuditLogManager',
+      () => ({
+        default: {
+          promises: {
+            recordAudit: ctx.recordAudit,
+          },
+        },
+      })
+    )
+
     ctx.UserAuditLogHandler = (await import(MODULE_PATH)).default
   })
 

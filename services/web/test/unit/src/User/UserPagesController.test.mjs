@@ -135,6 +135,18 @@ describe('UserPagesController', function () {
       })
     )
 
+    ctx.SsoManager = {
+      promises: {
+        listProviders: sinon.stub().resolves([]),
+      },
+    }
+    vi.doMock(
+      '../../../../app/src/Features/Authentication/SsoManager',
+      () => ({
+        default: ctx.SsoManager,
+      })
+    )
+
     vi.doMock('../../../../app/src/infrastructure/Modules', () => ({
       default: ctx.Modules,
     }))
