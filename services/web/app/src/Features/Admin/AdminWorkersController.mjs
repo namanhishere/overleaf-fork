@@ -9,6 +9,8 @@ import SessionManager from "../Authentication/SessionManager.mjs";
 import AuditLogManager from "../Audit/AuditLogManager.mjs";
 
 const healthClient = RedisWrapper.client("job_queue");
+const HEALTH_CACHE_KEY = "admin:workers:health";
+const HEALTH_CACHE_TTL_SECONDS = 15;
 
 // Worker list comes from the shared registry (Settings.apis.clsi.workers
 // or the single default CLSI url).
