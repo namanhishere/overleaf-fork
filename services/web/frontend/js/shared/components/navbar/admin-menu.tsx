@@ -53,6 +53,9 @@ export default function AdminMenu({
           <NavDropdownLinkItem href="/admin/storage">
             Storage Health
           </NavDropdownLinkItem>
+          <NavDropdownLinkItem href="/admin/backups">
+            Backups
+          </NavDropdownLinkItem>
           <NavDropdownLinkItem href="/admin/profiles">
             Compilation Profiles
           </NavDropdownLinkItem>
