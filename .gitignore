@@ -9,6 +9,7 @@ docker-compose.override.yml
 node_modules/
 .yarn/
 PLANS.md
+plan2.md
 reports/
 develop/output/
 compiles-worker-2/
