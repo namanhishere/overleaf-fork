@@ -86,6 +86,8 @@ io.configure(function () {
   // See http://answers.dotcloud.com/question/578/problem-with-websocket-over-ssl-in-safari-with
   io.set('match origin protocol', true)
 
+  io.set('transports', ['websocket', 'xhr-polling'])
+
   if (Settings.allowedCorsOrigins) {
     // Create a regex for matching origins, allowing wildcard subdomains and
     // comma-separated origin lists (each entry anchored independently).
