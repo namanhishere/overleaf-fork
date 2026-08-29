@@ -27,6 +27,7 @@ import useOpenProject from '@/shared/hooks/use-open-project'
 import importOverleafModules from '../../../../../macros/import-overleaf-module.macro'
 import { useFeatureFlag } from '@/shared/context/split-test-context'
 import ReviewModeOptions from './review-mode-options'
+import { ProjectToolsDropdown } from './project-tools-menu'
 
 const menubarExtraComponents = importOverleafModules(
   'menubarExtraComponents'
@@ -308,6 +309,7 @@ export const ToolbarMenuBar = () => {
           title={t('format')}
           id="format"
         />
+        <ProjectToolsDropdown />
         <MenuBarDropdown
           title={t('help')}
           id="help"

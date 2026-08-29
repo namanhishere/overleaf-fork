@@ -2,6 +2,9 @@ import { useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import * as eventTracking from '../../../../infrastructure/event-tracking'
 import { useProjectContext } from '@/shared/context/project-context'
+import { useFileTreeData } from '@/shared/context/file-tree-data-context'
+import { useFileTreeSelectable } from '../../contexts/file-tree-selectable'
+import { findInTree } from '../../util/find-in-tree'
 
 import {
   DropdownDivider,
@@ -27,8 +30,19 @@ function FileTreeItemMenuItems() {
     setRootDocId,
   } = useFileTreeActionable()
 
-  const { project } = useProjectContext()
+  const { projectId, project } = useProjectContext()
   const projectOwner = project?.owner?._id
+  const { fileTreeData } = useFileTreeData()
+  const { selectedEntityIds } = useFileTreeSelectable()
+  const selectedEntityId =
+    selectedEntityIds.size === 1 ? Array.from(selectedEntityIds)[0] : null
+  const selectedResult = selectedEntityId
+    ? findInTree(fileTreeData, selectedEntityId)
+    : null
+  const canOpenMarkdownPreview =
+    selectedResult?.type === 'doc' &&
+    selectedFileName != null &&
+    selectedFileName.toLowerCase().endsWith('.md')
 
   const downloadWithAnalytics = useCallback(() => {
     // we are only interested in downloads of bib files WRT analytics, for the purposes of promoting the tpr integrations
@@ -64,6 +78,18 @@ function FileTreeItemMenuItems() {
             {t('download')}
           </DropdownItem>
         </li>
+      ) : null}
+      {canOpenMarkdownPreview && selectedResult ? (
+        <>
+          <DropdownDivider />
+          <li role="none">
+            <DropdownItem
+              href={`/project/${projectId}/doc/${selectedResult.entity._id}/preview`}
+            >
+              Open markdown preview
+            </DropdownItem>
+          </li>
+        </>
       ) : null}
       {canSetRootDocId ? (
         <>

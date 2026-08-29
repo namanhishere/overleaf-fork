@@ -1,5 +1,6 @@
 import FileTreeRoot from '../../../../../frontend/js/features/file-tree/components/file-tree-root'
 import { EditorProviders } from '../../../helpers/editor-providers'
+import type { Folder } from '../../../../../types/folder'
 
 describe('FileTree Context Menu Flow', function () {
   beforeEach(function () {
@@ -190,6 +191,52 @@ describe('FileTree Context Menu Flow', function () {
 
     cy.findAllByRole('treeitem', { name: 'main.tex' }).trigger('contextmenu')
     cy.findByRole('menu').should('not.exist')
+  })
+
+  it('shows "Open markdown preview" only for .md documents', function () {
+    const rootFolder: Folder[] = [
+      {
+        _id: 'root-folder-id',
+        name: 'rootFolder',
+        docs: [
+          { _id: 'md-doc', name: 'notes.md' },
+          { _id: 'tex-doc', name: 'main.tex' },
+        ],
+        folders: [],
+        fileRefs: [],
+      },
+    ]
+
+    cy.mount(
+      <EditorProviders
+        rootFolder={rootFolder}
+        projectId="123abc"
+        rootDocId="tex-doc"
+      >
+        <FileTreeRoot
+          refProviders={{}}
+          setRefProviderEnabled={cy.stub()}
+          setStartedFreeTrial={cy.stub()}
+          onSelect={cy.stub()}
+          onInit={cy.stub()}
+          isConnected
+        />
+      </EditorProviders>
+    )
+
+    // non-markdown doc: no preview item
+    cy.findByRole('treeitem', { name: 'main.tex' }).click({ force: true })
+    cy.findByRole('treeitem', { name: 'main.tex' }).trigger('contextmenu')
+    cy.findByRole('menu')
+      .findByRole('menuitem', { name: 'Open markdown preview' })
+      .should('not.exist')
+
+    // markdown doc: preview item links to the doc preview page
+    cy.findByRole('treeitem', { name: 'notes.md' }).click({ force: true })
+    cy.findByRole('treeitem', { name: 'notes.md' }).trigger('contextmenu')
+    cy.findByRole('menu')
+      .findByRole('menuitem', { name: 'Open markdown preview' })
+      .should('have.attr', 'href', '/project/123abc/doc/md-doc/preview')
   })
 
   it('shows "set main document" item when appropriate', function () {
