@@ -329,9 +329,14 @@ webRouter.use(
     // Disabled because it's impractical to include every resource via CORS or
     // with the magic CORP header
     crossOriginEmbedderPolicy: false,
-    // We need to be able to share the context of some popups. For example,
-    // when Recurly opens Paypal in a popup.
-    crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
+    // COOP requires a trustworthy origin (https or localhost). For plain http
+    // on a LAN IP (e.g. http://192.168.1.102) the browser ignores the header
+    // and logs a warning. Disable it when not serving over https to avoid the
+    // spurious warning in dev/LAN setups.
+    crossOriginOpenerPolicy:
+      Settings.siteUrl && Settings.siteUrl.startsWith('https:')
+        ? { policy: 'same-origin-allow-popups' }
+        : false,
     // Disabled because it's not a security header and has possibly-unwanted
     // effects
     originAgentCluster: false,
