@@ -148,7 +148,10 @@ services:
       # HA requirement (§D16): a fixed session secret so all web instances
       # validate each other's sessions; without it every restart logs
       # everyone out and multi-instance deployments cannot share sessions.
-      - SESSION_SECRET=${SESSION_SECRET:-dev-session-secret-not-for-production}
+      # Default matches dev.env (foo) so web and the other services that
+      # validate the session cookie (real-time) agree unless SESSION_SECRET
+      # is set explicitly.
+      - SESSION_SECRET=${SESSION_SECRET:-foo}
       # Off-site backup target (PLANS 6): rsync-style remote, e.g.
       # user@backuphost:/backups. Empty disables the off-site push.
       - OFFSITE_BACKUP_TARGET=${OFFSITE_BACKUP_TARGET:-}
