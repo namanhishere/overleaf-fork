@@ -6,9 +6,20 @@
 #     up -d clsi clsi-worker-2 clsi-worker-3
 #
 # Each worker gets a distinct CLSI_SERVER_ID so the worker registry and
-# the admin Workers page show them separately; the Redis stream
-# distributes compiles across them, and per-project pinning
-# (project.compileWorkerId) still routes explicitly-pinned projects.
+# the admin Workers page show them separately.
+#
+# Worker selection is config-driven, not stream-driven: web enqueues
+# compiles on the Redis stream ("jobs:stream") and its in-process
+# CompileJobManager consumer executes each job against the CLSI URL
+# chosen by WorkerRegistry.resolveBaseUrl — the default CLSI unless the
+# project is pinned to a worker (project.compileWorkerId), in which case
+# the pin is honored only while that worker's last health check passed.
+# The stream serializes jobs in time; it does not distribute them across
+# workers. There is deliberately NO CLSI registration endpoint or stream
+# consumer on the workers themselves: the worker list comes from
+# Settings.apis.clsi.workers (CLSI_WORKERS env) and worker identity from
+# CLSI_SERVER_ID written into the job hash — matching PLANS D17's
+# simplicity bias for the HA design.
 #
 # NOTE: the clsi service mounts host ./compiles and ./output paths, so
 # additional workers must use distinct host directories to avoid
