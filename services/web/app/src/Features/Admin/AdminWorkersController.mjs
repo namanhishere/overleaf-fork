@@ -1,84 +1,16 @@
-import Settings from "@overleaf/settings";
-import { fetchJson } from "@overleaf/fetch-utils";
 import { expressify } from "@overleaf/promise-utils";
-import RedisWrapper from "../../infrastructure/RedisWrapper.mjs";
 import WorkerRegistry from "../Compile/WorkerRegistry.mjs";
 import { Project } from "../../models/Project.mjs";
 import { ObjectId } from "../../infrastructure/mongodb.mjs";
 import SessionManager from "../Authentication/SessionManager.mjs";
 import AuditLogManager from "../Audit/AuditLogManager.mjs";
 
-const healthClient = RedisWrapper.client("job_queue");
-const HEALTH_CACHE_KEY = "admin:workers:health";
-const HEALTH_CACHE_TTL_SECONDS = 15;
-
-// Worker list comes from the shared registry (Settings.apis.clsi.workers
-// or the single default CLSI url).
-function configuredWorkers() {
-  return WorkerRegistry.configuredWorkers();
-}
-
-async function probeWorker(worker) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 2000);
-  try {
-    const details = await fetchJson(`${worker.url}/health_details`, {
-      signal: controller.signal,
-    });
-    return {
-      id: worker.id,
-      url: worker.url,
-      ok: Boolean(details.ok),
-      concurrency: details.concurrency || null,
-      diskFreePct: details.disk?.freePct ?? null,
-      uptimeS: details.uptimeS ?? null,
-      versions: details.versions || {},
-    };
-  } catch (err) {
-    return {
-      id: worker.id,
-      url: worker.url,
-      ok: false,
-      error: String(err.message || err).slice(0, 200),
-    };
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
 // GET /admin/workers
 async function listWorkers(req, res) {
-  const workers = configuredWorkers();
-  let cached = null;
-  try {
-    cached = await healthClient.get(HEALTH_CACHE_KEY);
-  } catch {
-    cached = null;
-  }
-
-  if (cached) {
-    try {
-      return res.json(JSON.parse(cached));
-    } catch {
-      // fall through to a fresh probe
-    }
-  }
-
-  const result = {
-    checkedAt: new Date().toISOString(),
-    workers: await Promise.all(workers.map(probeWorker)),
-  };
-  try {
-    await healthClient.set(
-      HEALTH_CACHE_KEY,
-      JSON.stringify(result),
-      "EX",
-      HEALTH_CACHE_TTL_SECONDS,
-    );
-  } catch {
-    // cache is best-effort
-  }
-  res.json(result);
+  // Shared cached health from the worker registry: cache hits avoid the
+  // N x 2s probe fan-out on every page load, and the registry is
+  // fail-open, so a broken Redis or probe never blocks the page.
+  res.json(await WorkerRegistry.promises.getWorkerHealth());
 }
 
 // POST /admin/api/workers/pin  { projectId, workerId | null }

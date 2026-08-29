@@ -9,19 +9,24 @@ const modulePath = path.join(
 
 describe("AdminWorkersController", function () {
   beforeEach(async function (ctx) {
-    ctx.rclient = {
-      get: sinon.stub(),
-      set: sinon.stub().resolves("OK"),
+    ctx.healthResult = {
+      checkedAt: "2026-08-29T00:00:00Z",
+      workers: [{ id: "clsi-0", url: "http://clsi:3013", ok: true }],
     };
     ctx.registry = {
-      configuredWorkers: sinon.stub().returns([]),
       getWorker: sinon.stub(),
       invalidatePinCache: sinon.stub(),
+      promises: {
+        getWorkerHealth: sinon.stub().resolves(ctx.healthResult),
+      },
     };
+    ctx.projectUpdate = { exec: sinon.stub().resolves() };
+    ctx.Project = { updateOne: sinon.stub().returns(ctx.projectUpdate) };
+    ctx.recordAudit = sinon.stub().resolves();
 
     vi.doMock(
-      "../../../../../app/src/infrastructure/RedisWrapper.mjs",
-      () => ({ default: { client: () => ctx.rclient } }),
+      "../../../../../app/src/Features/Compile/WorkerRegistry.mjs",
+      () => ({ default: ctx.registry }),
     );
     vi.doMock("../../../../../app/src/infrastructure/mongodb.mjs", () => ({
       ObjectId: class FakeObjectId {
@@ -31,25 +36,19 @@ describe("AdminWorkersController", function () {
       },
     }));
     vi.doMock("../../../../../app/src/models/Project.mjs", () => ({
-      Project: {
-        updateOne: sinon.stub().returns({ exec: sinon.stub().resolves() }),
-      },
+      Project: ctx.Project,
     }));
     vi.doMock("../../../../../app/src/Features/Audit/AuditLogManager.mjs", () => ({
       default: {
-        promises: { recordAudit: sinon.stub().resolves() },
+        promises: { recordAudit: ctx.recordAudit },
       },
     }));
     vi.doMock(
-      "../../../../../app/src/Features/Compile/WorkerRegistry.mjs",
-      () => ({ default: ctx.registry }),
+      "../../../../../app/src/Features/Authentication/SessionManager.mjs",
+      () => ({
+        default: { getLoggedInUserId: sinon.stub().returns("user-1") },
+      }),
     );
-    vi.doMock("@overleaf/fetch-utils", () => ({
-      fetchJson: sinon.stub(),
-    }));
-    vi.doMock("@overleaf/settings", () => ({
-      default: { apis: { clsi: { url: "http://clsi:3013", workers: [] } } },
-    }));
 
     ctx.controller = (await import(modulePath)).default;
   });
@@ -58,51 +57,77 @@ describe("AdminWorkersController", function () {
     vi.resetModules();
   });
 
-  it("serves the cached health result without re-probing", async function (ctx) {
-    const cached = {
-      checkedAt: "2026-08-29T00:00:00Z",
-      workers: [{ id: "clsi-0", url: "http://clsi:3013", ok: true }],
+  it("serves the shared worker health result from the registry", async function (ctx) {
+    const res = { json: sinon.stub() };
+    await ctx.controller.listWorkers({}, res);
+
+    expect(ctx.registry.promises.getWorkerHealth).to.have.been.calledOnce;
+    expect(res.json.firstCall.args[0]).to.deep.equal(ctx.healthResult);
+  });
+
+  it("rejects a pin request without a valid projectId", async function (ctx) {
+    const res = {
+      status: sinon.stub().returnsThis(),
+      json: sinon.stub(),
     };
-    ctx.rclient.get.resolves(JSON.stringify(cached));
+    await ctx.controller.pinWorker(
+      { body: { projectId: "nope", workerId: "clsi-0" }, session: {} },
+      res,
+    );
 
-    const res = { json: sinon.stub() };
-    await ctx.controller.listWorkers({}, res);
-
-    expect(ctx.rclient.get).to.have.been.calledWith("admin:workers:health");
-    expect(ctx.rclient.set).not.to.have.been.called;
-    expect(res.json.firstCall.args[0]).to.deep.equal(cached);
+    expect(res.status).to.have.been.calledWith(400);
+    expect(ctx.Project.updateOne).not.to.have.been.called;
   });
 
-  it("probes workers and stores the fresh result in the cache on a miss", async function (ctx) {
-    ctx.rclient.get.resolves(null);
-
-    const res = { json: sinon.stub() };
-    await ctx.controller.listWorkers({}, res);
-
-    const body = res.json.firstCall.args[0];
-    expect(body.workers).to.deep.equal([]);
-    expect(typeof body.checkedAt).to.equal("string");
-    expect(ctx.rclient.set).to.have.been.calledWith(
-      "admin:workers:health",
-      sinon.match.string,
-      "EX",
-      15,
+  it("rejects a pin request for an unknown worker", async function (ctx) {
+    ctx.registry.getWorker.returns(null);
+    const res = {
+      status: sinon.stub().returnsThis(),
+      json: sinon.stub(),
+    };
+    await ctx.controller.pinWorker(
+      {
+        body: { projectId: "aaaaaaaaaaaaaaaaaaaaaaaa", workerId: "ghost" },
+        session: {},
+      },
+      res,
     );
-    expect(JSON.parse(ctx.rclient.set.firstCall.args[1])).to.deep.equal(body);
+
+    expect(res.status).to.have.been.calledWith(400);
+    expect(ctx.Project.updateOne).not.to.have.been.called;
   });
 
-  it("re-probes and rewrites the cache when the cached payload is corrupt", async function (ctx) {
-    ctx.rclient.get.resolves("not-json{{");
-
+  it("pins a project to a worker and records an audit entry", async function (ctx) {
+    ctx.registry.getWorker.returns({ id: "worker-01", url: "http://w1:3013" });
     const res = { json: sinon.stub() };
-    await ctx.controller.listWorkers({}, res);
-
-    expect(res.json.firstCall.args[0].workers).to.deep.equal([]);
-    expect(ctx.rclient.set).to.have.been.calledWith(
-      "admin:workers:health",
-      sinon.match.string,
-      "EX",
-      15,
+    await ctx.controller.pinWorker(
+      {
+        body: { projectId: "aaaaaaaaaaaaaaaaaaaaaaaa", workerId: "worker-01" },
+        session: {},
+      },
+      res,
     );
+
+    expect(ctx.Project.updateOne).to.have.been.calledWith(
+      { _id: sinon.match({ value: "aaaaaaaaaaaaaaaaaaaaaaaa" }) },
+      { $set: { compileWorkerId: "worker-01" } },
+    );
+    expect(ctx.projectUpdate.exec).to.have.been.calledOnce;
+    expect(ctx.registry.invalidatePinCache).to.have.been.calledWith(
+      "aaaaaaaaaaaaaaaaaaaaaaaa",
+    );
+    expect(ctx.recordAudit).to.have.been.calledWith(
+      sinon.match({
+        actorId: "user-1",
+        action: "worker-pin-set",
+        targetType: "project",
+        info: { workerId: "worker-01" },
+      }),
+    );
+    expect(res.json.firstCall.args[0]).to.deep.equal({
+      ok: true,
+      projectId: "aaaaaaaaaaaaaaaaaaaaaaaa",
+      workerId: "worker-01",
+    });
   });
 });
