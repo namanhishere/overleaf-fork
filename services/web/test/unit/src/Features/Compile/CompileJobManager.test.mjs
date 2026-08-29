@@ -126,6 +126,46 @@ describe("CompileJobManager", function () {
     });
   });
 
+  describe("reapStaleSlots", function () {
+    function mockSlotLookup(ctx, rows) {
+      ctx.rclient.keys = sinon.stub().resolves(["activeCompiles:p:p1"]);
+      ctx.rclient.smembers = sinon.stub().resolves(["live-job", "leaked-job"]);
+      ctx.rclient.srem = sinon.stub().resolves(1);
+      ctx.CompileJob.find.returns({
+        lean: () => ({
+          select: () => ({
+            exec: sinon.stub().resolves(rows),
+          }),
+        }),
+      });
+    }
+
+    it("removes members whose job has no live row", async function (ctx) {
+      mockSlotLookup(ctx, [{ jobId: "live-job" }]);
+      const n = await ctx.CompileJobManager.reapStaleSlots();
+      expect(n).to.equal(1);
+      expect(ctx.rclient.srem.firstCall.args).to.deep.equal([
+        "activeCompiles:p:p1",
+        "leaked-job",
+      ]);
+    });
+
+    it("keeps the set untouched when every member has a live row", async function (ctx) {
+      mockSlotLookup(ctx, [{ jobId: "live-job" }, { jobId: "leaked-job" }]);
+      const n = await ctx.CompileJobManager.reapStaleSlots();
+      expect(n).to.equal(0);
+      expect(ctx.rclient.srem.called).to.be.false;
+    });
+
+    it("returns 0 when there are no slot keys", async function (ctx) {
+      ctx.rclient.keys = sinon.stub().resolves([]);
+      ctx.rclient.smembers = sinon.stub();
+      const n = await ctx.CompileJobManager.reapStaleSlots();
+      expect(n).to.equal(0);
+      expect(ctx.rclient.smembers.called).to.be.false;
+    });
+  });
+
   describe("finishJob", function () {
     it("only finalizes rows still in an active state", async function (ctx) {
       await ctx.CompileJobManager.finishJob("j9", {

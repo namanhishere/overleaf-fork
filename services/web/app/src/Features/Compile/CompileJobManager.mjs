@@ -153,6 +153,37 @@ async function reapStaleJobs(now = Date.now()) {
   return result.modifiedCount || 0;
 }
 
+// Compile slots are Redis sets with no TTL. A process dying between
+// acquireAllSlots and the final release (deploy restart, crash) leaks its
+// jobId into the set forever, permanently burning one concurrency slot for
+// that project/user (per-project cap is typically 1) and 429-ing every
+// subsequent compile. Remove set members whose job no longer has a live
+// queued/running row: rows reaped by the job reaper, finished rows, and
+// rows that never existed (process died between acquire and startJob).
+// SREM is idempotent, so concurrent reapers across web replicas are safe.
+async function reapStaleSlots() {
+  const slotKeys = await rclient.keys("activeCompiles:*");
+  let removed = 0;
+  for (const key of slotKeys) {
+    const members = await rclient.smembers(key);
+    if (members.length === 0) continue;
+    const rows = await CompileJob.find({
+      jobId: { $in: members },
+      status: { $in: ["queued", "running"] },
+    })
+      .lean()
+      .select("jobId")
+      .exec();
+    const live = new Set(rows.map((row) => row.jobId));
+    const stale = members.filter((jobId) => !live.has(jobId));
+    if (stale.length > 0) {
+      await rclient.srem(key, ...stale);
+      removed += stale.length;
+    }
+  }
+  return removed;
+}
+
 let reaperTimer = null;
 
 function startReaper() {
@@ -161,6 +192,9 @@ function startReaper() {
     reapStaleJobs().catch((err) =>
       logger.warn({ err }, "compile job reaper failed"),
     );
+    reapStaleSlots().catch((err) =>
+      logger.warn({ err }, "compile slot reaper failed"),
+    );
   }, REAP_INTERVAL_MS);
   reaperTimer.unref?.();
 }
@@ -168,6 +202,7 @@ function startReaper() {
 const CompileJobManager = {
   CompileLimitReachedError,
   reapStaleJobs,
+  reapStaleSlots,
 
   async acquireAllSlots(userId, projectId, jobId) {
     await acquireSlot("project", projectId, jobId);
